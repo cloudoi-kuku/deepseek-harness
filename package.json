@@ -150,6 +150,8 @@
     "dsh": "node --import tsx/esm apps/cli/src/bin.ts",
     "demo:ptc": "node scripts/demo-ptc.mjs",
     "demo:inspector": "node --import tsx/esm apps/cli/src/bin.ts web --patch ./packages/experimental/inspector/cordis.source.patch.yml",
+    "test:hosted-generate": "vitest run packages/experimental/hosted-generate/tests",
+    "demo:hosted-generate": "TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx packages/experimental/hosted-generate/example/serve.ts",
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "dev:web": "tsx scripts/dev-web.ts --poll",
     "postinstall": "node scripts/install-lefthook.mjs"

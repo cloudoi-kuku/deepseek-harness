@@ -1,0 +1,49 @@
+# Loopback generate API. Bind stays on 127.0.0.1; this process is not a
+# multi-tenant boundary. Bash is off so a generation cannot start subprocesses.
+
+- id: webserver
+  name: '@deepseek-ai/dsh-host-webserver'
+  config:
+    host: '127.0.0.1'
+    port: !!js "Number(process.env.DSH_HOSTED_GENERATE_PORT ?? 0)"
+
+- id: credentials
+  name: '@deepseek-ai/dsh-credentials-local'
+
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  config:
+    thinking: disabled
+
+- id: agent-spine
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    persona: You generate static websites and small apps as UTF-8 files in the workspace.
+    workspaceContext: false
+    skills:
+      enabled: false
+    toolBash: false
+    toolJobs: false
+
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash
+
+- id: fs-local
+  name: '@deepseek-ai/dsh-fs-local'
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: hosted-generate
+  name: '@deepseek-ai/dsh-experimental-hosted-generate'
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash
+    maxConcurrentSessions: 1
+    sessionTimeoutMs: !!js "Number(process.env.DSH_HOSTED_GENERATE_TIMEOUT_MS ?? 30000)"
+    maxSteps: 6
+    printListen: !!js "process.env.DSH_HOSTED_GENERATE_PRINT === '1'"
+    authToken: !!js "process.env.DSH_HOSTED_GENERATE_TOKEN ?? ''"

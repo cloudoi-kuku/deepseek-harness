@@ -1,0 +1,45 @@
+# Headless overlay for CoreNet generate: keep filesystem tools, disable
+# subprocesses, network tools, and delegation. Applied after grok.patch.yml.
+# File tools that stay enabled: tool-fs, tool-fs-search, tool-str-replace-editor.
+
+- id: tool-bash
+  disabled: true
+
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-jobs
+  disabled: true
+
+- id: tool-web
+  disabled: true
+
+- id: tool-skill
+  disabled: true
+
+- id: tool-subagent
+  disabled: true
+
+- id: tool-subagent-fork
+  disabled: true
+
+- id: tool-subagent-control
+  disabled: true
+
+- id: tool-subagent-list-agents
+  disabled: true
+
+- id: tool-subagent-report
+  disabled: true
+
+- id: tool-workflow
+  disabled: true
+
+- id: tool-ralph
+  disabled: true
+
+- id: tool-todo
+  disabled: true
+
+- id: tool-goal
+  disabled: true

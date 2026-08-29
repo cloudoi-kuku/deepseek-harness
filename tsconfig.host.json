@@ -96,6 +96,7 @@
     "apps/web/stress-tests/reasoning-chunks.stress.ts",
     "apps/cli/tests/**/*.ts",
     "packages/*/*/tests/**/*.ts",
+    "packages/experimental/hosted-generate/example/**/*.ts",
     "scripts/**/*.ts",
     "website/**/*.ts",
     "website/.vitepress/**/*.ts"
@@ -278,6 +279,7 @@
     { "path": "./packages/test-support/llm-mock-server" },
     { "path": "./packages/experimental/webworker-packer" },
     { "path": "./packages/experimental/inspector/tsconfig.host.json" },
+    { "path": "./packages/experimental/hosted-generate" },
     { "path": "./packages/subagent/subagent" },
     { "path": "./packages/subagent/tool-subagent" },
     { "path": "./packages/subagent/tool-subagent-control" },
