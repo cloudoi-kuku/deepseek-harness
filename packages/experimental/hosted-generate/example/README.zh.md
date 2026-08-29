@@ -58,7 +58,7 @@ mock 会在第一次生成时写入固定的 `index.html`。可选的真实模�
 <a id="azure-envon-scale-to-zero"></a>
 ## Azure（Envon，缩到零）
 
-线上应用 `ca-envon-generate-poc` 部署在 `cae-envon-prd-eus2-01`，同时提供 Harness **web UI** 与 generate HTTP 约定。镜像：`packages/experimental/hosted-generate/example/azure/Dockerfile.web`（`@deepseek-ai/dsh@0.1.1-rc.2`）。`dsh web` 绑定 `127.0.0.1:3080`；`generate-server.mjs` 绑定 `127.0.0.1:3081`，并以 `grok.patch.yml` 加 `generate.patch.yml`（仅文件系统工具）运行 `dsh --profile headless`。`web-proxy.mjs` 绑定 `0.0.0.0:8080`，要求 `GENERATE_TOKEN` 作为 HTTP Basic 密码或 `Authorization: Bearer`，并把 `/generate` 与 `/sessions/` 转到 generate 服务。`--trusted-host` 为 Container App FQDN。扩缩容：`minReplicas=0` / `maxReplicas=1`，1.0 vCPU / 2 Gi。
+线上应用 `ca-envon-generate-poc` 部署在 `cae-envon-prd-eus2-01`，在 `https://harness.cloudoi.io` 同时提供 Harness **web UI** 与 generate HTTP 约定。镜像：`packages/experimental/hosted-generate/example/azure/Dockerfile.web`（`@deepseek-ai/dsh@0.1.1-rc.2`）。`dsh web` 绑定 `127.0.0.1:3080`；`generate-server.mjs` 绑定 `127.0.0.1:3081`，并以 `grok.patch.yml` 加 `generate.patch.yml`（仅文件系统工具）运行 `dsh --profile headless`。`web-proxy.mjs` 绑定 `0.0.0.0:8080`，要求 `GENERATE_TOKEN` 作为 HTTP Basic 密码或 `Authorization: Bearer`，并把 `/generate` 与 `/sessions/` 转到 generate 服务。`--trusted-host` 为 `harness.cloudoi.io`。扩缩容：`minReplicas=0` / `maxReplicas=1`，1.0 vCPU / 2 Gi。
 
 默认模型是 Grok。`llm-bridge.mjs` 把 pi-ai 的 OpenAI 兼容 loopback 调用转到 Envon Foundry 部署 `grok-4-3`（`FOUNDRY_API_KEY`，CAE VNet 上的私有 PE）。不设 `FOUNDRY_API_KEY` 而设 `XAI_API_KEY` 时改走 `https://api.x.ai/v1`（模型 `grok-4.3`）。
 
