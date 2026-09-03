@@ -43,6 +43,9 @@
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-session-persistence": "workspace:^",
     "@deepseek-ai/dsh-storage": "workspace:^",
+    "@deepseek-ai/dsh-workspace-source": "workspace:^",
+    "@deepseek-ai/dsh-principal": "workspace:^",
+    "@deepseek-ai/dsh-hosted-limits": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
@@ -55,6 +58,9 @@
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-session-persistence": "workspace:^",
     "@deepseek-ai/dsh-storage": "workspace:^",
+    "@deepseek-ai/dsh-workspace-source": "workspace:^",
+    "@deepseek-ai/dsh-principal": "workspace:^",
+    "@deepseek-ai/dsh-hosted-limits": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

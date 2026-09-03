@@ -5,6 +5,7 @@ import type {} from '@deepseek-ai/dsh-attachment'
 // Activates the webServer Context merge used below.
 import type { WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
+import type {} from '@deepseek-ai/dsh-principal'
 import { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
 import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
 import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
@@ -155,7 +156,19 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
       }
       const apiProxy = ctx.get('apiProxy')
       if (apiProxy === undefined) return new Response('not found', { status: 404 })
-      return toFetchHandler(apiProxy).fetch(request)
+      const principal = ctx.get('principal')
+      if (principal === undefined) return toFetchHandler(apiProxy).fetch(request)
+      const identified = await principal.bindFromRequest(request)
+      return await principal.run(identified, async () => {
+        const response = await toFetchHandler(apiProxy).fetch(request)
+        const pathname = new URL(request.url).pathname
+        if (!pathname.endsWith('/auth.logout')) return response
+        const logout = await principal.logout(request)
+        if (logout.setCookie === undefined || logout.setCookie.length === 0) return response
+        const headers = new Headers(response.headers)
+        for (const cookie of logout.setCookie) headers.append('set-cookie', cookie)
+        return new Response(response.body, { status: response.status, headers })
+      })
     },
   })
   const route: WebRoute = {

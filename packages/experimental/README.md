@@ -8,5 +8,6 @@ This group contains prototypes and internal-only Cordis plugins that use the rep
 |---|---|---|
 | `agent-team/` | Implicit-root Agent Teams roster, durable peer mailbox, shared task DAG, and runtime coordination | `ctx.agentTeams` |
 | `tool-agent-team/` | Scoped model-facing Agent Teams tools and collaboration guidance | — |
+| `hosted-generate/` | Loopback generate API: disposable workspace, UTF-8 file-map artifact, no deploy | `ctx.hostedGenerate` |
 
 The [subtree rules](AGENTS.md) define dependency isolation, release exclusion, and promotion.

@@ -1,0 +1,7 @@
+{
+  "name": "hosted-generate-example",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Loopback hosted-generate composition for CoreNet/Hosting POC"
+}

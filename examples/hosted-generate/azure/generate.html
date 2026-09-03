@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CloudOI Envon Harness</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    main { max-width: 44rem; margin: 0 auto; padding: 2.5rem 1.25rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+    p { color: #94a3b8; line-height: 1.5; }
+    textarea { width: 100%; min-height: 8rem; box-sizing: border-box; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #334155; background: #1e293b; color: inherit; }
+    button { margin-top: 1rem; padding: 0.6rem 1.1rem; border: 0; border-radius: 0.5rem; background: #38bdf8; color: #0f172a; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: wait; }
+    .status { margin-top: 1.25rem; padding: 1rem; border-radius: 0.5rem; background: #1e293b; white-space: pre-wrap; }
+    a { color: #7dd3fc; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CloudOI Envon Harness</h1>
+    <p>This session is your CoreNet account. Describe an app. CloudOI generates files, pushes them to your connected GitHub, and deploys <code>*.cloudoi.dev</code>.</p>
+    <textarea id="prompt" placeholder="A one-page landing site for a tea shop, warm colors, email signup."></textarea>
+    <button id="go" type="button">Generate and publish</button>
+    <div class="status" id="status">Ready.</div>
+  </main>
+  <script>
+    const promptEl = document.getElementById('prompt')
+    const go = document.getElementById('go')
+    const status = document.getElementById('status')
+
+    async function poll(sessionId) {
+      for (let i = 0; i < 48; i += 1) {
+        const res = await fetch('/sessions/' + encodeURIComponent(sessionId), { credentials: 'same-origin' })
+        const body = await res.json()
+        status.textContent = 'Status: ' + (body.status || res.status)
+        if (body.status === 'completed') {
+          const lines = ['Published.']
+          if (body.repositoryUrl) lines.push('GitHub: ' + body.repositoryUrl)
+          if (body.publicUrl) lines.push('Site: ' + body.publicUrl)
+          if (body.publishError) lines.push('Publish: ' + body.publishError)
+          if (!body.repositoryUrl && !body.publicUrl) {
+            lines.push('Files are ready. Connect GitHub on CoreNet to auto-publish.')
+          }
+          status.textContent = lines.join('\n')
+          return
+        }
+        if (body.status === 'failed' || body.status === 'cancelled') {
+          status.textContent = (body.error && body.error.message) || 'Generation failed.'
+          return
+        }
+        await new Promise((r) => setTimeout(r, 5000))
+      }
+      status.textContent = 'Timed out waiting for generation.'
+    }
+
+    go.addEventListener('click', async () => {
+      const prompt = promptEl.value.trim()
+      if (prompt.length < 10) {
+        status.textContent = 'Describe the app in at least 10 characters.'
+        return
+      }
+      go.disabled = true
+      status.textContent = 'Starting generation…'
+      try {
+        const res = await fetch('/generate', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ prompt }),
+        })
+        const body = await res.json()
+        if (!res.ok) {
+          status.textContent = (body.error && body.error.message) || ('HTTP ' + res.status)
+          return
+        }
+        await poll(body.sessionId)
+      } catch (err) {
+        status.textContent = err instanceof Error ? err.message : String(err)
+      } finally {
+        go.disabled = false
+      }
+    })
+  </script>
+</body>
+</html>

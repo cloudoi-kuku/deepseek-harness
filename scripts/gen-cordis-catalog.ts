@@ -113,6 +113,9 @@ export const SERVICE_PAGE: Record<string, string> = {
   web: 'web.md',
   workflowEngine: 'workflow.md',
   workspaceRegistry: 'workspace.md',
+  workspaceSource: 'workspace.md',
+  principal: 'workspace.md',
+  hostedLimits: 'workspace.md',
 }
 
 /**
@@ -512,7 +515,19 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   DomainChanged: 'storage.md',
   DomainFacility: 'storage.md',
   Workspace: 'workspace.md',
+  WorkspaceOwner: 'workspace.md',
   WorkspaceId: 'workspace.md',
+  WorkspaceSource: 'workspace.md',
+  WorkspaceSourceRecord: 'workspace.md',
+  WorkspaceCreateGitRequest: 'workspace.md',
+  WorkspaceSourceProvider: 'workspace.md',
+  WorkspaceSourceRequest: 'workspace.md',
+  WorkspaceSourceSpec: 'workspace.md',
+  WorkspaceCheckout: 'workspace.md',
+  GitWorkspaceSource: 'workspace.md',
+  GitWorkspaceStatus: 'workspace.md',
+  GitCommitResult: 'workspace.md',
+  GitPullResult: 'workspace.md',
   WebBootGraph: 'client-modules.md',
   SessionTelemetryRecord: 'session-telemetry.md',
   WorkflowRunInfo: 'workflow.md',
@@ -547,6 +562,7 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
   'Promise',
   'Record',
   'Readonly',
+  'Request',
   'Uint8Array',
 ])
 
@@ -559,6 +575,10 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   InsertTextRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   AgentHandle: 'agent ownership handle is owned by packages/core/agent/README.md',
   AgentPreset: 'discovered preset record is owned by packages/preset/agent-presets/README.md',
+  Principal: 'request-scoped caller is owned by packages/identity/principal/README.md',
+  PrincipalAuthenticator: 'authenticator contract is owned by packages/identity/principal/README.md',
+  PrincipalLogout: 'logout cookie payload is owned by packages/identity/principal/README.md',
+  LimitOwner: 'quota key is owned by packages/identity/hosted-limits/README.md',
   PresetMetadata: 'preset display text is owned by packages/preset/agent-presets/README.md',
   BashEnvContributor: 'service-local extension type is owned by packages/shell/tool-bash/src/index.ts',
   BashEnvVariableInfo: 'service-local metadata type is owned by packages/shell/tool-bash/src/index.ts',

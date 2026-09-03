@@ -33,6 +33,8 @@
     "lint:fix:contracts-ready": "tsx scripts/run-oxlint.ts --config .oxlintrc.staged.json packages/typert/generator/tests/fixtures/type-model --fix && tsx scripts/run-oxlint.ts . --fix",
     "duplication": "jscpd --config .jscpd.json packages scripts",
     "test": "vitest run",
+    "test:hosted-generate": "vitest run packages/experimental/hosted-generate/tests examples/hosted-generate/tests/keyless-smoke.spec.ts",
+    "demo:hosted-generate": "TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx examples/hosted-generate/serve.ts",
     "test:coverage": "vitest run --coverage",
     "test:coverage:partitioned": "tsx scripts/run-coverage-partitions.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",

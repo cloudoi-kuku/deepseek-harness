@@ -17,6 +17,43 @@ import type { RpcRequest, RpcResponse } from './rpc.ts'
  */
 export type WorkspaceId = Branded<'WorkspaceId'>
 
+/** Local checkout origin on the wire. */
+export interface LocalWorkspaceSourceView {
+  kind: 'local'
+  path: string
+}
+
+/** Git checkout origin on the wire. Tokens are never included. */
+export interface GitWorkspaceSourceView {
+  kind: 'git'
+  provider: 'github' | 'generic'
+  owner: string
+  repo: string
+  branch: string
+  remoteUrl: string
+  checkoutPath: string
+  credentialId?: string | undefined
+}
+
+/** Discriminated checkout origin projected on {@link WorkspaceView}. */
+export type WorkspaceSourceView = LocalWorkspaceSourceView | GitWorkspaceSourceView
+
+/** Tenant+user stamped when the record was created under an authenticated principal. */
+export interface WorkspaceOwnerView {
+  tenantId: string
+  userId: string
+}
+
+/** Git working-copy status projected on workspace.gitStatus. Tokens are never included. */
+export interface GitWorkspaceStatusView {
+  branch: string
+  dirty: boolean
+  ahead: number
+  behind: number
+  conflicted: string[]
+  lastPushedAt?: string | undefined
+}
+
 /** One workspace row: the record projection every workspace.* value carries. */
 export interface WorkspaceView {
   workspaceId: WorkspaceId
@@ -24,6 +61,10 @@ export interface WorkspaceView {
   path: string
   /** Display title (defaults to the path basename at create). */
   title: string
+  /** Checkout origin; omitted only by hosts that have not yet written domain v3. */
+  source?: WorkspaceSourceView
+  /** Tenant+user owner; omitted on OSS/local and history-bootstrap records. */
+  owner?: WorkspaceOwnerView | undefined
   /**
    * Sessions accounted under this workspace, in manually owned order
    * (attach prepends, insertSessionBefore reorders; activity never does).
@@ -55,6 +96,27 @@ export interface WorkspaceApi {
    */
   create(request: RpcRequest<{ path: string }>):
   Promise<RpcResponse<{ workspace: WorkspaceView; created: boolean }>>
+
+  /**
+   * Creates (or idempotently resolves) a workspace from a Git remote. The
+   * host clones or fetches into `checkoutParent/${owner}-${repo}` through
+   * `ctx.workspaceSource` and records `{ kind: 'git', ... }` — never a
+   * token. When principal authenticators are mounted, `checkoutParent` is
+   * ignored and the parent is `hostedLimits.checkoutRoot/<tenantId>/<userId>`.
+   * A composition without the source seam fails with
+   * `workspace-source-unavailable`. An unparseable remote fails with
+   * `workspace-invalid-remote`. Clone/fetch failures fail with
+   * `workspace-prepare-failed`.
+   */
+  createGit(request: RpcRequest<{
+    remoteUrl: string
+    checkoutParent?: string
+    branch?: string
+    owner?: string
+    repo?: string
+    credentialId?: string
+    title?: string
+  }>): Promise<RpcResponse<{ workspace: WorkspaceView; created: boolean }>>
 
   /**
    * Renames a workspace. `title` is trimmed and must be non-empty
@@ -106,4 +168,36 @@ export interface WorkspaceApi {
    */
   archiveSession(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Git working-copy status. A local workspace fails with `workspace-not-git`.
+   * An unknown or non-visible id fails with `workspace-not-found`.
+   */
+  gitStatus(request: RpcRequest<{ workspaceId: WorkspaceId }>):
+  Promise<RpcResponse<{ status: GitWorkspaceStatusView }>>
+
+  /**
+   * Stage every change and commit. `message` must be non-empty.
+   */
+  gitCommit(request: RpcRequest<{ workspaceId: WorkspaceId; message: string }>):
+  Promise<RpcResponse<{ commit: string }>>
+
+  /**
+   * Push the current branch to `origin`.
+   */
+  gitPush(request: RpcRequest<{ workspaceId: WorkspaceId }>):
+  Promise<RpcResponse<{ pushed: true }>>
+
+  /**
+   * Fast-forward pull. Conflicted paths are returned rather than throwing when
+   * the working copy cannot fast-forward cleanly.
+   */
+  gitPull(request: RpcRequest<{ workspaceId: WorkspaceId }>):
+  Promise<RpcResponse<{ conflicted: string[] }>>
+
+  /**
+   * Check out `branch`, creating it from `origin/branch` when needed.
+   */
+  gitCheckoutBranch(request: RpcRequest<{ workspaceId: WorkspaceId; branch: string }>):
+  Promise<RpcResponse<{ branch: string }>>
 }

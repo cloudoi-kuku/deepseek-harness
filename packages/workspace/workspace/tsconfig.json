@@ -33,6 +33,15 @@
       "path": "../../util/brand"
     },
     {
+      "path": "../workspace-source"
+    },
+    {
+      "path": "../../identity/principal"
+    },
+    {
+      "path": "../../identity/hosted-limits"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

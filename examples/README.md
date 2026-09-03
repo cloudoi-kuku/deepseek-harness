@@ -24,6 +24,10 @@ A self-referential agent that can inspect and change its in-memory Cordis plugin
 
 An opt-in Web overlay for durable, Session-local reminders. It supports positive whole-second `after_seconds` delays and absolute `at` targets through `schedule_create`, `schedule_list`, and `schedule_delete`; active reminders persist in the original Session, resume when that Session becomes live again, and do not run while it is cold. Run `dsh web --patch examples/web-schedule/cordis.yml`; see [web-schedule/README.md](web-schedule/README.md) for absolute-time authority, delivery, and recovery boundaries.
 
+## hosted-generate
+
+Loopback generate API for a CoreNet/Hosting-style file-map artifact, with bash disabled. See the [hosted-generate example](hosted-generate/README.md).
+
 ## acp-agent
 
 An Agent Client Protocol automation server for programmatic clients, with session, permission, and cancellation support. See the [ACP example reference](acp-agent/README.md).

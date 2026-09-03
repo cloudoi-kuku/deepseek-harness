@@ -881,6 +881,39 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'hostedLimits',
+    summary: 'Hosted abuse and isolation policy.',
+    description: 'Hosted abuse and isolation policy. Default web-app does not mount this service; hosted patches do.',
+    methods: [
+      {
+        signature: 'assertNotKilled(): void',
+        description: 'Reject when the deployment kill switch is on.',
+        parameters: [],
+      },
+      {
+        signature: 'assertWorkspaceCreate(owner: LimitOwner, existingCount: number): void',
+        description: 'Reject a new workspace when the per-user cap is already reached.',
+        parameters: [{ name: 'owner', description: 'tenant+user the new record would belong to.' }, { name: 'existingCount', description: 'workspaces already owned by that pair.' }],
+      },
+      {
+        signature: 'assertSessionCreate(owner: LimitOwner, liveCount: number): void',
+        description: 'Reject a new live session when the per-user cap is already reached.',
+        parameters: [{ name: 'owner', description: 'tenant+user owning the workspace.' }, { name: 'liveCount', description: 'live sessions already attached to that owner\'s workspaces.' }],
+      },
+      {
+        signature: 'assertGitOp(owner: LimitOwner): void',
+        description: 'Reject a git RPC when the per-minute cap is already reached. Process-local.',
+        parameters: [{ name: 'owner', description: 'tenant+user performing the git operation.' }],
+      },
+      {
+        signature: 'requireCheckoutRoot(): string',
+        description: 'The checkout root required for isolated git checkouts, or a loud failure.',
+        parameters: [],
+        returns: 'the absolute checkout root.',
+      },
+    ],
+  },
+  {
     key: 'invariants',
     summary: 'Package-owned invariant registry with global and regex-based selection.',
     description: 'Package-owned invariant registry with global and regex-based selection.',
@@ -1131,6 +1164,55 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Select whether plan mode should be active. Between turns the method appends the change immediately because no in-turn pre-step will run until another prompt starts a turn. The open-turn fold is the idle signal: agent status stays `running` through post-turn checkpointing, when no further in-turn pre-step runs. During an open turn the selection remains pending until the next accepted in-turn pre-step. Repeated selection of the current or already-pending state is a no-op.',
         parameters: [{ name: 'agent', description: 'The agent to switch.' }, { name: 'active', description: 'Whether plan mode should be active.' }],
         returns: 'what happened: `committed` (logged now), `queued` (awaiting the next accepted in-turn pre-step), `cancelled` (an opposite pending selection was cleared; the logged state already matches), or `noop` (already in that state).',
+      },
+    ],
+  },
+  {
+    key: 'principal',
+    summary: 'Request-scoped caller registry.',
+    description: 'Request-scoped caller registry. Load one instance per context as `ctx.principal`; authenticators register into it. The default web-app composition does not mount this service.',
+    methods: [
+      {
+        signature: 'register(authenticator: PrincipalAuthenticator): () => void',
+        description: 'Register one authenticator. A duplicate `id` throws. The disposer unregisters on fiber disposal.',
+        parameters: [{ name: 'authenticator', description: 'implementation that reads cookies or headers.' }],
+        returns: 'the disposer that unregisters the authenticator.',
+      },
+      {
+        signature: 'hasAuthenticators(): boolean',
+        description: 'Whether at least one authenticator is registered. Workspace ownership and checkout isolation require this, not merely that the service is mounted.',
+        parameters: [],
+        returns: 'true when a caller is expected on Host requests.',
+      },
+      {
+        signature: 'current(): Principal | undefined',
+        description: 'The caller bound by the current `run` continuation.',
+        parameters: [],
+        returns: 'the bound principal, or `undefined` outside `run` / when bind found none.',
+      },
+      {
+        signature: 'require(action: string): Principal',
+        description: 'The bound caller, or a rejection when none is bound.',
+        parameters: [{ name: 'action', description: 'included in the error message.' }],
+        returns: 'the bound principal.',
+      },
+      {
+        signature: 'run<T>(principal: Principal | undefined, fn: () => T): T',
+        description: 'Bind `principal` for the duration of `fn`. Nested `run` calls replace the store for the inner continuation and restore the outer value afterwards. Concurrent `run` calls do not share a store.',
+        parameters: [{ name: 'principal', description: 'caller to expose via {@link current}, or `undefined`.' }, { name: 'fn', description: 'work that may read {@link current}.' }],
+        returns: '`fn`\'s return value.',
+      },
+      {
+        signature: 'async bindFromRequest(request: Request): Promise<Principal | undefined>',
+        description: 'Ask authenticators in registration order until one returns a principal. Does not bind ALS; the HTTP carrier wraps the handler in run.',
+        parameters: [{ name: 'request', description: 'inbound WHATWG Request (cookies and Authorization).' }],
+        returns: 'the first identified principal, or `undefined` when none matched.',
+      },
+      {
+        signature: 'async logout(request: Request): Promise<PrincipalLogout>',
+        description: 'Collect logout side effects (typically `Set-Cookie` clearing) from every authenticator. Identification is not required; clearing a missing cookie is a no-op.',
+        parameters: [{ name: 'request', description: 'inbound request whose cookies/headers to clear.' }],
+        returns: 'merged `Set-Cookie` values for the HTTP response.',
       },
     ],
   },
@@ -2324,16 +2406,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the existing or newly durable workspace.',
       },
       {
+        signature: 'async createGit(request: WorkspaceCreateGitRequest): Promise<Workspace>',
+        description: 'Create or reuse a workspace whose origin is a Git remote. Requires `ctx.workspaceSource` with a git provider. Resolves the remote, prepares (clone or fetch) the checkout, then records `{ kind: \'git\', ... }` — never a token. Repeated calls for the same canonical checkout path return the existing entity without changing its title.',
+        parameters: [{ name: 'request', description: 'remote URL, checkout parent, and optional branch/title.' }],
+        returns: 'the existing or newly durable workspace.',
+      },
+      {
         signature: 'get(id: WorkspaceId): Workspace | undefined',
         description: 'Look up a workspace by id.',
         parameters: [{ name: 'id', description: 'Workspace id.' }],
         returns: 'the workspace, or `undefined` when unknown.',
       },
       {
+        signature: 'getVisible(id: WorkspaceId): Workspace | undefined',
+        description: 'Look up a workspace the current principal may see. Without authenticators this is get. With authenticators, an unauthenticated caller or a record owned by someone else returns `undefined` (same as unknown).',
+        parameters: [{ name: 'id', description: 'Workspace id.' }],
+        returns: 'the workspace, or `undefined` when unknown or not visible.',
+      },
+      {
         signature: 'list(): Workspace[]',
-        description: 'Synchronous workspace projection in durable registry order. Every entity\'s `sessionIds` getter is already filtered by the startup/live canonical-cwd header index; this method performs no persistence reads.',
+        description: 'Synchronous workspace projection in durable registry order. Every entity\'s `sessionIds` getter is already filtered by the startup/live canonical-cwd header index; this method performs no persistence reads. Internal consumers (bootstrap, attach) must use this unfiltered list.',
         parameters: [],
         returns: 'a fresh ordered array of workspace entities.',
+      },
+      {
+        signature: 'listVisible(): Workspace[]',
+        description: 'Workspaces the current principal may see. Without authenticators this is list. With authenticators and no bound caller, the list is empty.',
+        parameters: [],
+        returns: 'visible workspaces in durable registry order.',
       },
       {
         signature: 'delete(id: WorkspaceId): Promise<boolean>',
@@ -2358,6 +2458,77 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Resolve by canonical directory path without creating or mutating a workspace. A missing path rejects during `realpath`; an existing unowned directory returns `undefined`.',
         parameters: [{ name: 'path', description: 'Existing directory path in any spelling.' }],
         returns: 'the workspace owning the canonical path, when one exists.',
+      },
+      {
+        signature: 'authRequired(): boolean',
+        description: 'Whether Host callers must be authenticated for workspace visibility.',
+        parameters: [],
+        returns: 'true when `ctx.principal` has at least one authenticator.',
+      },
+      {
+        signature: 'ownedCount(owner: WorkspaceOwner): number',
+        description: 'Count durable workspaces owned by `owner`.',
+        parameters: [{ name: 'owner', description: 'tenant+user pair.' }],
+        returns: 'the number of matching records.',
+      },
+      {
+        signature: 'liveSessionCount(owner: WorkspaceOwner): number',
+        description: 'Live sessions attached to workspaces owned by `owner`.',
+        parameters: [{ name: 'owner', description: 'tenant+user pair.' }],
+        returns: 'the number of live sessions on those workspaces.',
+      },
+    ],
+  },
+  {
+    key: 'workspaceSource',
+    summary: 'Workspace origin registry.',
+    description: 'Workspace origin registry. Load one instance per context as `ctx.workspaceSource`; providers register into it.',
+    methods: [
+      {
+        signature: 'register(provider: WorkspaceSourceProvider): () => void',
+        description: 'Register a provider for one kind. Throws WorkspaceSourceError `WORKSPACE_SOURCE_DUPLICATE_KIND` when that kind is already registered. The disposer unregisters on fiber disposal.',
+        parameters: [{ name: 'provider', description: 'implementation whose `kind` is the registry key.' }],
+        returns: 'the disposer that unregisters the provider.',
+      },
+      {
+        signature: 'async resolve(request: WorkspaceSourceRequest): Promise<WorkspaceSourceSpec>',
+        description: 'Canonicalize a request through the provider for `request.kind`.',
+        parameters: [{ name: 'request', description: 'local path or git remote request.' }],
+        returns: 'the durable spec; never contains a token.',
+      },
+      {
+        signature: 'async prepare(spec: WorkspaceSourceSpec): Promise<WorkspaceCheckout>',
+        description: 'Materialize or refresh the working copy, then return its canonical cwd.',
+        parameters: [{ name: 'spec', description: 'local or git spec (the durable workspace `source` field).' }],
+        returns: 'the checkout the agent/session machinery uses as cwd.',
+      },
+      {
+        signature: 'async status(spec: GitWorkspaceSource): Promise<GitWorkspaceStatus>',
+        description: 'Report git working-copy status.',
+        parameters: [{ name: 'spec', description: 'git spec whose checkout to inspect.' }],
+        returns: 'branch, dirty, ahead/behind, conflicts, and last-pushed time.',
+      },
+      {
+        signature: 'async commit(spec: GitWorkspaceSource, message: string): Promise<GitCommitResult>',
+        description: 'Stage every change and create a commit on the git checkout.',
+        parameters: [{ name: 'spec', description: 'git spec whose checkout to commit.' }, { name: 'message', description: 'non-empty commit message.' }],
+        returns: 'the new `HEAD` object name.',
+      },
+      {
+        signature: 'async push(spec: GitWorkspaceSource): Promise<void>',
+        description: 'Push the current branch to `origin`.',
+        parameters: [{ name: 'spec', description: 'git spec whose checkout to push.' }],
+      },
+      {
+        signature: 'async pull(spec: GitWorkspaceSource): Promise<GitPullResult>',
+        description: 'Fast-forward pull the current branch.',
+        parameters: [{ name: 'spec', description: 'git spec whose checkout to pull.' }],
+        returns: 'conflicted paths when the pull cannot complete cleanly.',
+      },
+      {
+        signature: 'async checkoutBranch(spec: GitWorkspaceSource, branch: string): Promise<void>',
+        description: 'Check out `branch` on the git working copy.',
+        parameters: [{ name: 'spec', description: 'git spec whose checkout to switch.' }, { name: 'branch', description: 'branch name.' }],
       },
     ],
   },
@@ -3414,6 +3585,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GenericResultView {\n    card: \'generic\';\n    title?: string;\n    content?: ContentBlock[];\n}',
   },
   {
+    name: 'GitCommitResult',
+    declaration: 'export interface GitCommitResult {\n    readonly commit: string;\n}',
+  },
+  {
+    name: 'GitPullResult',
+    declaration: 'export interface GitPullResult {\n    readonly conflicted: readonly string[];\n}',
+  },
+  {
+    name: 'GitWorkspaceProvider',
+    declaration: 'export type GitWorkspaceProvider = \'github\' | \'generic\';',
+  },
+  {
+    name: 'GitWorkspaceRequest',
+    declaration: 'export interface GitWorkspaceRequest {\n    readonly kind: \'git\';\n    readonly remoteUrl: string;\n    readonly checkoutParent: string;\n    readonly branch?: string;\n    readonly owner?: string;\n    readonly repo?: string;\n    readonly credentialId?: string | undefined;\n}',
+  },
+  {
+    name: 'GitWorkspaceSource',
+    declaration: 'export interface GitWorkspaceSource {\n    readonly kind: \'git\';\n    readonly provider: GitWorkspaceProvider;\n    readonly owner: string;\n    readonly repo: string;\n    readonly branch: string;\n    readonly remoteUrl: string;\n    readonly checkoutPath: string;\n    readonly credentialId?: string | undefined;\n}',
+  },
+  {
+    name: 'GitWorkspaceStatus',
+    declaration: 'export interface GitWorkspaceStatus {\n    readonly branch: string;\n    readonly dirty: boolean;\n    readonly ahead: number;\n    readonly behind: number;\n    readonly conflicted: readonly string[];\n    readonly lastPushedAt?: string;\n}',
+  },
+  {
     name: 'GoalActivation',
     declaration: 'export type GoalActivation = \'armed\' | \'disarmed\';',
   },
@@ -3594,6 +3789,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n}',
   },
   {
+    name: 'LimitOwner',
+    declaration: 'export interface LimitOwner {\n    readonly tenantId: string;\n    readonly userId: string;\n}',
+  },
+  {
     name: 'LlmAdapter',
     declaration: 'export abstract class LlmAdapter {\n    providerInfo(provider: string): LlmProviderInfo;\n    providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;\n    listModels(_provider: string): Promise<readonly LlmModelInfo[]>;\n    resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall>;\n    abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
@@ -3648,6 +3847,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LlmRuntime',
     declaration: 'export class LlmRuntime extends Service {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+  },
+  {
+    name: 'LocalWorkspaceRequest',
+    declaration: 'export interface LocalWorkspaceRequest {\n    readonly kind: \'local\';\n    readonly path: string;\n}',
+  },
+  {
+    name: 'LocalWorkspaceSource',
+    declaration: 'export interface LocalWorkspaceSource {\n    readonly kind: \'local\';\n    readonly path: string;\n}',
   },
   {
     name: 'LspHover',
@@ -3850,6 +4057,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n} | {\n    kind: \'ask\';\n    reason?: string;\n};',
   },
   {
+    name: 'Principal',
+    declaration: 'export interface Principal {\n    readonly tenantId: string;\n    readonly userId: string;\n    readonly product?: string | undefined;\n    readonly expiresAt?: number | undefined;\n}',
+  },
+  {
+    name: 'PrincipalAuthenticator',
+    declaration: 'export interface PrincipalAuthenticator {\n    readonly id: string;\n    identify(request: Request): Principal | undefined | Promise<Principal | undefined>;\n    logout?(request: Request): PrincipalLogout | Promise<PrincipalLogout>;\n}',
+  },
+  {
+    name: 'PrincipalLogout',
+    declaration: 'export interface PrincipalLogout {\n    readonly setCookie?: readonly string[] | undefined;\n}',
+  },
+  {
     name: 'ProjectionChangeListener',
     declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: number) => void;',
   },
@@ -3979,7 +4198,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RpcErrorDetailsMap',
-    declaration: 'export interface RpcErrorDetailsMap {\n    \'bad-request\': {\n        issues: ZodIssue[];\n    };\n    \'cancelled\': {};\n    \'session-not-found\': {\n        sessionId: SessionId;\n    };\n    \'model-unavailable\': {\n        provider: string;\n        model: string;\n    };\n    \'session-conflict\': {\n        sessionId: SessionId;\n        requestedCwd: string;\n        existingCwd?: string;\n    };\n    \'invalid-time-zone\': {\n        value: string;\n    };\n    \'workspace-attach-failed\': {\n        sessionId: SessionId;\n        workspaceId: string;\n    };\n    \'workspace-not-found\': {\n        workspaceId: string;\n    };\n    \'workspace-invalid-path\': {\n        path: string;\n    };\n    \'workspace-name-conflict\': {\n        name: string;\n    };\n    \'workspace-move-invalid\': {\n        workspaceId: string;\n        sessionId: SessionId;\n        beforeSessionId?: SessionId;\n    };\n    \'directory-unreadable\': {\n        path: string;\n    };\n    \'directory-exists\': {\n        path: string;\n    };\n    \'directory-create-failed\': {\n        path: string;\n    };\n    \'directory-picker-unavailable\': {\n        capability: string;\n    };\n    \'agent-preset-read-only\': {\n        agentPreset: string;\n        reason: string;\n    };\n    \'agent-preset-locked\': {\n        sessionId: SessionId;\n        agentPreset: string;\n    };\n    \'agent-preset-conflict\': {\n        sessionId: SessionId;\n        requestedPreset: string;\n        existingPreset?: string;\n    };\n    \'agent-preset-not-found\': {\n        agentPreset: string;\n      /* …truncated — full shape in source */',
+    declaration: 'export interface RpcErrorDetailsMap {\n    \'bad-request\': {\n        issues: ZodIssue[];\n    };\n    \'cancelled\': {};\n    \'session-not-found\': {\n        sessionId: SessionId;\n    };\n    \'model-unavailable\': {\n        provider: string;\n        model: string;\n    };\n    \'session-conflict\': {\n        sessionId: SessionId;\n        requestedCwd: string;\n        existingCwd?: string;\n    };\n    \'invalid-time-zone\': {\n        value: string;\n    };\n    \'workspace-attach-failed\': {\n        sessionId: SessionId;\n        workspaceId: string;\n    };\n    \'workspace-not-found\': {\n        workspaceId: string;\n    };\n    \'workspace-invalid-path\': {\n        path: string;\n    };\n    \'workspace-invalid-remote\': {\n        remoteUrl: string;\n    };\n    \'workspace-source-unavailable\': {\n        kind: string;\n    };\n    \'workspace-prepare-failed\': {\n        remoteUrl?: string | undefined;\n        path?: string | undefined;\n    };\n    \'workspace-name-conflict\': {\n        name: string;\n    };\n    \'workspace-move-invalid\': {\n        workspaceId: string;\n        sessionId: SessionId;\n        beforeSessionId?: SessionId;\n    };\n    \'directory-unreadable\': {\n        path: string;\n    };\n    \'directory-exists\': {\n        path: string;\n    };\n    \'directory-create-failed\': {\n        path: string;\n    };\n    \'directory-picker-unavailable\': {\n        capability: string;\n    };\n    \'agent-preset-read-only\': {\n        agentPreset: string;\n        reason: string;\n    };\n    \'agent-preset-locked\': {\n        session /* …truncated — full shape in source */',
   },
   {
     name: 'RpcId',
@@ -5052,6 +5271,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkflowStopReason',
     declaration: 'export type WorkflowStopReason = \'completed\' | \'cancelled\' | \'error\';',
+  },
+  {
+    name: 'WorkspaceCheckout',
+    declaration: 'export interface WorkspaceCheckout {\n    readonly cwd: string;\n    readonly spec: WorkspaceSourceSpec;\n}',
+  },
+  {
+    name: 'WorkspaceCreateGitRequest',
+    declaration: 'export interface WorkspaceCreateGitRequest {\n    readonly remoteUrl: string;\n    readonly checkoutParent?: string | undefined;\n    readonly branch?: string;\n    readonly owner?: string;\n    readonly repo?: string;\n    readonly credentialId?: string | undefined;\n    readonly title?: string;\n}',
+  },
+  {
+    name: 'WorkspaceOwner',
+    declaration: 'export interface WorkspaceOwner {\n    readonly tenantId: string;\n    readonly userId: string;\n}',
+  },
+  {
+    name: 'WorkspaceSourceKind',
+    declaration: 'export type WorkspaceSourceKind = \'local\' | \'git\';',
+  },
+  {
+    name: 'WorkspaceSourceProvider',
+    declaration: 'export interface WorkspaceSourceProvider {\n    readonly kind: WorkspaceSourceKind;\n    resolve(request: WorkspaceSourceRequest): Promise<WorkspaceSourceSpec>;\n    prepare(spec: WorkspaceSourceSpec): Promise<WorkspaceCheckout>;\n    status?(spec: GitWorkspaceSource): Promise<GitWorkspaceStatus>;\n    commit?(spec: GitWorkspaceSource, message: string): Promise<GitCommitResult>;\n    push?(spec: GitWorkspaceSource): Promise<void>;\n    pull?(spec: GitWorkspaceSource): Promise<GitPullResult>;\n    checkoutBranch?(spec: GitWorkspaceSource, branch: string): Promise<void>;\n}',
+  },
+  {
+    name: 'WorkspaceSourceRecord',
+    declaration: 'export type WorkspaceSourceRecord = LocalWorkspaceSource | GitWorkspaceSource;',
+  },
+  {
+    name: 'WorkspaceSourceRequest',
+    declaration: 'export type WorkspaceSourceRequest = LocalWorkspaceRequest | GitWorkspaceRequest;',
+  },
+  {
+    name: 'WorkspaceSourceSpec',
+    declaration: 'export type WorkspaceSourceSpec = WorkspaceSourceRecord;',
   },
 ]
 

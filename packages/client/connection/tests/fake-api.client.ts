@@ -155,6 +155,10 @@ export class FakeApiClient implements IApiClient {
       workspace: { workspaceId: 'fk-ws' as never, path: '/f/ws', title: 'ws', sessionIds: [], createdAt: '0', updatedAt: '0' },
       created: true,
     }))),
+    createGit: (payload: unknown) => this.record('workspace.createGit', payload, Promise.resolve(ok({
+      workspace: { workspaceId: 'fk-ws' as never, path: '/f/ws', title: 'ws', sessionIds: [], createdAt: '0', updatedAt: '0' },
+      created: true,
+    }))),
     rename: (payload: unknown) => this.record('workspace.rename', payload, Promise.resolve(ok({
       workspace: { workspaceId: 'fk-ws' as never, path: '/f/ws', title: 'ws', sessionIds: [], createdAt: '0', updatedAt: '0' },
     }))),
@@ -168,6 +172,20 @@ export class FakeApiClient implements IApiClient {
     archiveSession: (payload: unknown) => this.record('workspace.archiveSession', payload, Promise.resolve(ok({
       archivedSessionIds: [(payload as { sessionId: SessionId }).sessionId],
     }))),
+    gitStatus: (payload: unknown) => this.record('workspace.gitStatus', payload, Promise.resolve(ok({
+      status: { branch: 'main', dirty: false, ahead: 0, behind: 0, conflicted: [] },
+    }))),
+    gitCommit: (payload: unknown) => this.record('workspace.gitCommit', payload, Promise.resolve(ok({ commit: 'abc' }))),
+    gitPush: (payload: unknown) => this.record('workspace.gitPush', payload, Promise.resolve(ok({ pushed: true as const }))),
+    gitPull: (payload: unknown) => this.record('workspace.gitPull', payload, Promise.resolve(ok({ conflicted: [] }))),
+    gitCheckoutBranch: (payload: unknown) => this.record('workspace.gitCheckoutBranch', payload, Promise.resolve(ok({
+      branch: (payload as { branch: string }).branch,
+    }))),
+  }
+
+  readonly auth: IApiClient['auth'] = {
+    me: (payload: unknown) => this.record('auth.me', payload, Promise.resolve(ok({ authenticated: false as const }))),
+    logout: (payload: unknown) => this.record('auth.logout', payload, Promise.resolve(ok({ loggedOut: true as const }))),
   }
 
   // Payloads stay `unknown` (lint-lane note above); response rows are the real

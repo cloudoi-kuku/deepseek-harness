@@ -12,17 +12,35 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
+import type {
+  GitWorkspaceSource,
+  WorkspaceSourceRecord,
+} from '@deepseek-ai/dsh-workspace-source'
+import type {} from '@deepseek-ai/dsh-workspace-source'
+import { PrincipalUnauthenticatedError } from '@deepseek-ai/dsh-principal'
+import type {} from '@deepseek-ai/dsh-principal'
+import { HostedLimitsError } from '@deepseek-ai/dsh-hosted-limits'
+import type {} from '@deepseek-ai/dsh-hosted-limits'
 import { WorkspaceEntity } from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
 
 export { WorkspaceMoveInvalidError } from './entity.ts'
+import { isolatedCheckoutParent, sameWorkspaceOwner } from './isolation.ts'
 import { realpathNormalize } from './paths.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
-import type { Workspace, WorkspaceId as WorkspaceIdBrand } from './types.ts'
+import type { Workspace, WorkspaceId as WorkspaceIdBrand, WorkspaceOwner } from './types.ts'
 
-export type { Workspace } from './types.ts'
-export { workspaceDomainState, workspaceRecord, workspaceDomainSpec } from './spec.ts'
+export type {
+  GitWorkspaceProvider,
+  GitWorkspaceSource,
+  LocalWorkspaceSource,
+  Workspace,
+  WorkspaceOwner,
+  WorkspaceSourceRecord,
+} from './types.ts'
+export { isolatedCheckoutParent, principalCheckoutSegment, sameWorkspaceOwner } from './isolation.ts'
+export { workspaceDomainState, workspaceRecord, workspaceDomainSpec, workspaceSource } from './spec.ts'
 export type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
 export { realpathNormalize } from './paths.ts'
 
@@ -49,6 +67,64 @@ export class WorkspaceUnknownSessionError extends Error {
   constructor(readonly sessionId: SessionId) {
     super(`cannot archive session '${sessionId}': live sessions and session persistence hold no such session`)
     this.name = 'WorkspaceUnknownSessionError'
+  }
+}
+
+/**
+ * `createGit` or a git-workspace prepare ran without `ctx.workspaceSource`.
+ * Local `create({ path })` never requires the source seam.
+ */
+export class WorkspaceSourceUnavailableError extends Error {
+  /**
+   * @param action - the registry operation that needed the seam.
+   */
+  constructor(readonly action: string) {
+    super(`cannot ${action}: ctx.workspaceSource is not mounted`)
+    this.name = 'WorkspaceSourceUnavailableError'
+  }
+}
+
+/** Arguments of {@link WorkspaceRegistry.createGit}. Tokens are never accepted. */
+export interface WorkspaceCreateGitRequest {
+  /** Clone URL (HTTPS, SSH, or `file:`). */
+  readonly remoteUrl: string
+  /**
+   * Absolute directory under which `${owner}-${repo}` is checked out.
+   * Required when no principal authenticators are mounted. Ignored when they
+   * are: the parent becomes `hostedLimits.checkoutRoot/<tenantId>/<userId>`.
+   */
+  readonly checkoutParent?: string | undefined
+  /** Branch to check out; omitted uses the git provider default (`main`). */
+  readonly branch?: string
+  /** Override owner parsed from {@link remoteUrl}. */
+  readonly owner?: string
+  /** Override repository name parsed from {@link remoteUrl}. */
+  readonly repo?: string
+  /** Optional credentials-seam record id; never a secret. */
+  readonly credentialId?: string | undefined
+  /** Display title used only when a new record is created. */
+  readonly title?: string
+}
+
+/**
+ * `createGit` ran without `checkoutParent` and without an authenticated
+ * principal to derive an isolated parent.
+ */
+export class WorkspaceCheckoutParentRequiredError extends Error {
+  constructor() {
+    super('cannot create a git workspace: checkoutParent is required when no principal is bound')
+    this.name = 'WorkspaceCheckoutParentRequiredError'
+  }
+}
+
+/** A path already belongs to another principal's workspace. */
+export class WorkspaceForbiddenError extends Error {
+  /**
+   * @param workspaceId - the existing record the caller may not adopt.
+   */
+  constructor(readonly workspaceId: WorkspaceId) {
+    super(`cannot adopt workspace '${workspaceId}': it belongs to another principal`)
+    this.name = 'WorkspaceForbiddenError'
   }
 }
 
@@ -156,11 +232,26 @@ export class WorkspaceRegistry extends Service {
   // drop the parameter with its @param clause and the `create(path, title?)`
   // lines in this package's README pair.
   async create(path: string, title?: string): Promise<Workspace> {
+    this.ctx.get('hostedLimits')?.assertNotKilled()
     const canonical = await realpathNormalize(path)
     if (!(await stat(canonical)).isDirectory()) {
       throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
     }
-    return await this.enqueueOperation(() => this.createCanonical(canonical, title))
+    return await this.enqueueOperation(() =>
+      this.createCanonical(canonical, title, { kind: 'local', path: canonical }))
+  }
+
+  /**
+   * Create or reuse a workspace whose origin is a Git remote. Requires
+   * `ctx.workspaceSource` with a git provider. Resolves the remote, prepares
+   * (clone or fetch) the checkout, then records `{ kind: 'git', ... }` — never
+   * a token. Repeated calls for the same canonical checkout path return the
+   * existing entity without changing its title.
+   * @param request - remote URL, checkout parent, and optional branch/title.
+   * @returns the existing or newly durable workspace.
+   */
+  async createGit(request: WorkspaceCreateGitRequest): Promise<Workspace> {
+    return await this.enqueueOperation(() => this.createGitLocked(request))
   }
 
   /**
@@ -173,9 +264,26 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
+   * Look up a workspace the current principal may see. Without authenticators
+   * this is {@link get}. With authenticators, an unauthenticated caller or a
+   * record owned by someone else returns `undefined` (same as unknown).
+   * @param id - Workspace id.
+   * @returns the workspace, or `undefined` when unknown or not visible.
+   */
+  getVisible(id: WorkspaceId): Workspace | undefined {
+    const workspace = this.get(id)
+    if (workspace === undefined) return undefined
+    if (!this.authRequired()) return workspace
+    const current = this.ctx.get('principal')?.current()
+    if (current === undefined) return undefined
+    return sameWorkspaceOwner(workspace.owner, current) ? workspace : undefined
+  }
+
+  /**
    * Synchronous workspace projection in durable registry order. Every
    * entity's `sessionIds` getter is already filtered by the startup/live
    * canonical-cwd header index; this method performs no persistence reads.
+   * Internal consumers (bootstrap, attach) must use this unfiltered list.
    * @returns a fresh ordered array of workspace entities.
    */
   list(): Workspace[] {
@@ -186,6 +294,19 @@ export class WorkspaceRegistry extends Service {
       }
       return entity
     })
+  }
+
+  /**
+   * Workspaces the current principal may see. Without authenticators this is
+   * {@link list}. With authenticators and no bound caller, the list is empty.
+   * @returns visible workspaces in durable registry order.
+   */
+  listVisible(): Workspace[] {
+    const all = this.list()
+    if (!this.authRequired()) return all
+    const current = this.ctx.get('principal')?.current()
+    if (current === undefined) return []
+    return all.filter(workspace => sameWorkspaceOwner(workspace.owner, current))
   }
 
   /**
@@ -282,9 +403,50 @@ export class WorkspaceRegistry extends Service {
     return undefined
   }
 
-  private async createCanonical(canonical: string, title?: string): Promise<WorkspaceEntity> {
+  /**
+   * Resolve, prepare, and record a git workspace while holding the registry write chain.
+   * @param request - remote URL, checkout parent, and optional branch/title.
+   * @returns the existing or newly durable workspace entity.
+   */
+  private async createGitLocked(request: WorkspaceCreateGitRequest): Promise<WorkspaceEntity> {
+    this.ctx.get('hostedLimits')?.assertNotKilled()
+    const source = this.ctx.get('workspaceSource')
+    if (source === undefined) throw new WorkspaceSourceUnavailableError('create a git workspace')
+    const checkoutParent = this.resolveGitCheckoutParent(request)
+    const spec = await source.resolve({
+      kind: 'git',
+      remoteUrl: request.remoteUrl,
+      checkoutParent,
+      ...request.branch === undefined ? {} : { branch: request.branch },
+      ...request.owner === undefined ? {} : { owner: request.owner },
+      ...request.repo === undefined ? {} : { repo: request.repo },
+      ...request.credentialId === undefined ? {} : { credentialId: request.credentialId },
+    })
+    if (spec.kind !== 'git') {
+      throw new Error(`workspace-source resolve(git) returned kind '${spec.kind}'`)
+    }
+    const checkout = await source.prepare(spec)
+    const gitSource: GitWorkspaceSource = { ...spec, checkoutPath: checkout.cwd }
+    const title = request.title ?? `${gitSource.owner}/${gitSource.repo}`
+    return await this.createCanonical(checkout.cwd, title, gitSource)
+  }
+
+  private async createCanonical(
+    canonical: string,
+    title: string | undefined,
+    source: WorkspaceSourceRecord,
+  ): Promise<WorkspaceEntity> {
+    const owner = this.authRequired() ? this.requireOwner('create a workspace') : undefined
     for (const entity of this.entities.values()) {
-      if (entity.path === canonical) return entity
+      if (entity.path !== canonical) continue
+      if (owner !== undefined && !sameWorkspaceOwner(entity.owner, owner)) {
+        throw new WorkspaceForbiddenError(entity.id)
+      }
+      return entity
+    }
+
+    if (owner !== undefined) {
+      this.ctx.get('hostedLimits')?.assertWorkspaceCreate(owner, this.ownedCount(owner))
     }
 
     const workspaceName = title ?? basename(canonical)
@@ -295,9 +457,11 @@ export class WorkspaceRegistry extends Service {
     const record: WorkspaceRecord = {
       path: canonical,
       title: workspaceName,
+      source,
       sessionIds: [],
       createdAt: now,
       updatedAt: now,
+      ...owner === undefined ? {} : { owner },
     }
     const entity = new WorkspaceEntity(this.host, id, record)
     this.entities.set(id, entity)
@@ -460,6 +624,7 @@ export class WorkspaceRegistry extends Service {
         const record: WorkspaceRecord = {
           path: group.path,
           title: basename(group.path),
+          source: { kind: 'local', path: group.path },
           sessionIds,
           createdAt,
           updatedAt: createdAt,
@@ -628,6 +793,70 @@ export class WorkspaceRegistry extends Service {
       throw new Error(`cannot validate session '${id}': session persistence holds no such session`)
     }
     return header
+  }
+
+  /**
+   * Whether Host callers must be authenticated for workspace visibility.
+   * @returns true when `ctx.principal` has at least one authenticator.
+   */
+  authRequired(): boolean {
+    return this.ctx.get('principal')?.hasAuthenticators() === true
+  }
+
+  /**
+   * Count durable workspaces owned by `owner`.
+   * @param owner - tenant+user pair.
+   * @returns the number of matching records.
+   */
+  ownedCount(owner: WorkspaceOwner): number {
+    let count = 0
+    for (const workspace of this.list()) {
+      if (sameWorkspaceOwner(workspace.owner, owner)) count += 1
+    }
+    return count
+  }
+
+  /**
+   * Live sessions attached to workspaces owned by `owner`.
+   * @param owner - tenant+user pair.
+   * @returns the number of live sessions on those workspaces.
+   */
+  liveSessionCount(owner: WorkspaceOwner): number {
+    const sessions = this.ctx.get('sessions')
+    if (sessions === undefined) return 0
+    let count = 0
+    for (const workspace of this.list()) {
+      if (!sameWorkspaceOwner(workspace.owner, owner)) continue
+      for (const sessionId of workspace.sessionIds) {
+        if (sessions.get(sessionId) !== undefined) count += 1
+      }
+    }
+    return count
+  }
+
+  private requireOwner(action: string): WorkspaceOwner {
+    const principal = this.ctx.get('principal')
+    if (principal === undefined) throw new PrincipalUnauthenticatedError(action)
+    const current = principal.require(action)
+    return { tenantId: current.tenantId, userId: current.userId }
+  }
+
+  private resolveGitCheckoutParent(request: WorkspaceCreateGitRequest): string {
+    if (this.authRequired()) {
+      const owner = this.requireOwner('create a git workspace')
+      const limits = this.ctx.get('hostedLimits')
+      if (limits === undefined) {
+        throw new HostedLimitsError(
+          'checkout-root-missing',
+          'hosted-limits must be mounted when principal authenticators are registered',
+        )
+      }
+      return isolatedCheckoutParent(limits.requireCheckoutRoot(), owner)
+    }
+    if (request.checkoutParent === undefined || request.checkoutParent === '') {
+      throw new WorkspaceCheckoutParentRequiredError()
+    }
+    return request.checkoutParent
   }
 
   private requireTable(): KvTable<WorkspaceId, WorkspaceRecord> {

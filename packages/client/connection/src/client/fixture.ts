@@ -2679,6 +2679,30 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         emitHost({ type: 'host/workspace-changed', workspace: { ...created } })
         return ok(request, { workspace: { ...created }, created: true })
       },
+      createGit: (request) => {
+        const { remoteUrl, title } = request.payload
+        const now = new Date().toISOString()
+        const created: WorkspaceView = {
+          workspaceId: wid(`fx-ws-${nextWorkspace++}`),
+          path: `/tmp/fixture-git/${nextWorkspace}`,
+          title: title ?? remoteUrl,
+          source: {
+            kind: 'git',
+            provider: 'generic',
+            owner: 'fixture',
+            repo: 'repo',
+            branch: request.payload.branch ?? 'main',
+            remoteUrl,
+            checkoutPath: `/tmp/fixture-git/${nextWorkspace}`,
+          },
+          sessionIds: [],
+          createdAt: now,
+          updatedAt: now,
+        }
+        workspaces.unshift(created)
+        emitHost({ type: 'host/workspace-changed', workspace: { ...created } })
+        return ok(request, { workspace: { ...created }, created: true })
+      },
       rename: (request) => {
         const { workspaceId, title } = request.payload
         const workspace = workspaces.find(w => w.workspaceId === workspaceId)
@@ -2788,6 +2812,17 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         return ok(request, { archivedSessionIds: [...archivedSessionIds] })
       },
+      gitStatus: request => ok(request, {
+        status: { branch: 'main', dirty: false, ahead: 0, behind: 0, conflicted: [] },
+      }),
+      gitCommit: request => ok(request, { commit: 'fixture-commit' }),
+      gitPush: request => ok(request, { pushed: true as const }),
+      gitPull: request => ok(request, { conflicted: [] }),
+      gitCheckoutBranch: request => ok(request, { branch: request.payload.branch }),
+    },
+    auth: {
+      me: request => ok(request, { authenticated: false as const }),
+      logout: request => ok(request, { loggedOut: true as const }),
     },
     agentPresets: {
       // Both trusts appear, because a surface must present a locally authored

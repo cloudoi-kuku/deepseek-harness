@@ -13,17 +13,44 @@ import type { WorkspaceId } from './types.ts'
 /** Workspace id schema at the durable boundary; branding has no runtime representation. */
 const workspaceId = z.string().transform(value => value as WorkspaceId)
 
+const localWorkspaceSource = z.object({
+  kind: z.literal('local'),
+  path: z.string(),
+})
+
+const gitWorkspaceSource = z.object({
+  kind: z.literal('git'),
+  provider: z.enum(['github', 'generic']),
+  owner: z.string(),
+  repo: z.string(),
+  branch: z.string(),
+  remoteUrl: z.string(),
+  checkoutPath: z.string(),
+  credentialId: z.string().optional(),
+})
+
+/** Discriminated checkout origin stored on every workspace record. */
+export const workspaceSource = z.discriminatedUnion('kind', [
+  localWorkspaceSource,
+  gitWorkspaceSource,
+])
+
 /**
- * Durable shape of one workspace record. `path` is the `fs.realpath` canon
- * stamped at create; `sessionIds` is the ordered ownership account (array
- * order is display order); timestamps are ISO-8601 strings.
+ * Durable shape of one workspace record. `path` is the local cwd canon
+ * stamped at create (`fs.realpath` for an existing directory); `source` is
+ * the checkout origin (local path or git remote — never a token);
+ * `sessionIds` is the ordered ownership account (array order is display
+ * order); timestamps are ISO-8601 strings; `owner` is the tenant+user that
+ * created the record under an authenticated principal (omitted on OSS rows).
  */
 export const workspaceRecord = z.object({
   path: z.string(),
   title: z.string(),
+  source: workspaceSource,
   sessionIds: z.array(z.string().transform(SessionId)),
   createdAt: z.string(),
   updatedAt: z.string(),
+  owner: z.object({ tenantId: z.string(), userId: z.string() }).optional(),
 })
 
 /** One stored workspace record, inferred from {@link workspaceRecord}. */
@@ -66,7 +93,7 @@ export type WorkspaceDomainState = z.infer<typeof workspaceDomainState>
  */
 export const workspaceDomainSpec = defineDomain({
   name: 'workspace',
-  version: 2,
+  version: 4,
   global: {
     schema: workspaceDomainState,
     initial: { initialized: false, workspaceIds: [], archivedSessionIds: [] },
