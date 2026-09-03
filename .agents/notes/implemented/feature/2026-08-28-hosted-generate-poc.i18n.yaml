@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-28-hosted-generate-poc.md
-2026-08-28-hosted-generate-poc.md: 99e0f682f73a1692f0cda3f9b7a3cf2f3446c5e8
-2026-08-28-hosted-generate-poc.zh.md: 64e55885ac823949deeab2a8205cfb3dcc5c8bf3
+2026-08-28-hosted-generate-poc.md: 5d7e81b226551e32ded87e7cac28a211ea1a76f1
+2026-08-28-hosted-generate-poc.zh.md: cb1c5ff71085b2e0f24eea727318834387760a87

@@ -58,11 +58,11 @@ mock 会在第一次生成时写入固定的 `index.html`。可选的真实模�
 <a id="azure-envon-scale-to-zero"></a>
 ## Azure（Envon，缩到零）
 
-线上应用 `ca-envon-generate-poc` 部署在 `cae-envon-prd-eus2-01`，在 `https://harness.cloudoi.io` 同时提供 Harness **web UI** 与 generate HTTP 约定。镜像：`packages/experimental/hosted-generate/example/azure/Dockerfile.web`（`@deepseek-ai/dsh@0.1.1-rc.2`）。`dsh web` 绑定 `127.0.0.1:3080`；`generate-server.mjs` 绑定 `127.0.0.1:3081`，并以 `grok.patch.yml` 加 `generate.patch.yml`（仅文件系统工具）运行 `dsh --profile headless`。`web-proxy.mjs` 绑定 `0.0.0.0:8080`，要求 `GENERATE_TOKEN` 作为 HTTP Basic 密码或 `Authorization: Bearer`，并把 `/generate` 与 `/sessions/` 转到 generate 服务。`--trusted-host` 为 `harness.cloudoi.io`。扩缩容：`minReplicas=0` / `maxReplicas=1`，1.0 vCPU / 2 Gi。
+线上应用 `ca-envon-generate-poc` 部署在 `cae-envon-prd-eus2-01`，在 `https://harness.cloudoi.io` 于 **`/` 提供 `dsh web`**，并提供 generate HTTP 约定。镜像：`packages/experimental/hosted-generate/example/azure/Dockerfile.web`（`@deepseek-ai/dsh@0.1.1-rc.2`，另装 `git`）。`dsh web` 绑定 `127.0.0.1:3080`，cwd 为 `/workspace`；`generate-server.mjs` 绑定 `127.0.0.1:3081`，并以 `grok.patch.yml` 加 `generate.patch.yml`（仅文件系统工具）运行 `dsh --profile headless`。`web-proxy.mjs` 绑定 `0.0.0.0:8080`，要求 CoreNet launch token 或 `GENERATE_TOKEN`（HTTP Basic 密码 / Bearer），并把 `/generate` 与 `/sessions/` 转到 generate 服务。有效的 `/?launch=` token 会请求 `GET /api/ai-build/from-harness/workspace`，把该 GitHub 仓库克隆进 `/workspace`，对该目录 POST dsh `workspace.create`（标题为 `owner/name`）使输入框可直接使用而无需目录选择器，再 302 到 `/`。`/new` 重定向到 `/`。`--trusted-host` 为 `harness.cloudoi.io`。扩缩容：`minReplicas=0` / `maxReplicas=1`，1.0 vCPU / 2 Gi。
 
 默认模型是 Grok。`llm-bridge.mjs` 把 pi-ai 的 OpenAI 兼容 loopback 调用转到 Envon Foundry 部署 `grok-4-3`（`FOUNDRY_API_KEY`，CAE VNet 上的私有 PE）。不设 `FOUNDRY_API_KEY` 而设 `XAI_API_KEY` 时改走 `https://api.x.ai/v1`（模型 `grok-4.3`）。
 
-`Dockerfile` + `server.mjs` 仍是无密钥的 generate 约定 mock（无 dsh、无模型 token）。Envon harness 是 CloudOI 的界面，不是独立的 dsh 登录：CoreNet launch token（`GET /api/ai-build/harness-launch`）把会话绑到该账号，完成后的 generate 调用 `POST /api/ai-build/from-harness/launch`，由 CoreNet 写 GitHub 和 `{slug}.cloudoi.dev`。操作者 `GENERATE_TOKEN` 仍用于演练。隔离仍不是多租户。
+`Dockerfile` + `server.mjs` 仍是无密钥的 generate 约定 mock（无 dsh、无模型 token）。Envon harness 是 CloudOI 的界面：CoreNet launch token（`GET /api/ai-build/harness-launch` → `/?launch=`）把会话绑到该账号，并把 GitHub 挂为 cwd。向导的 `POST /generate` 仍调用 `POST /api/ai-build/from-harness/launch`，由 CoreNet 写站点仓库和 `{slug}.cloudoi.dev`。操作者 `GENERATE_TOKEN` 仍用于在空的 `/workspace` 上演练。隔离仍不是多租户。
 
 -----
 
