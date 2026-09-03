@@ -1,0 +1,25 @@
+# Context for examples/hosted-generate/azure/Dockerfile.web (repository root).
+.git
+**/.git
+**/.gitignore
+**/node_modules
+**/lib
+**/*.tsbuildinfo
+coverage
+.cache
+.artifacts
+.dsh-build
+.playwright-mcp
+.worktrees
+worktrees
+.agents
+.github
+python
+tmp
+.orig
+**/.DS_Store
+apps/web/dist
+*.log
+.env
+.env.*
+!.env.example

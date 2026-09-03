@@ -33,13 +33,20 @@ import {
 } from '../api/sessions.schema.ts'
 import {
   workspaceArchiveSessionValueSchema,
+  workspaceCreateGitValueSchema,
   workspaceCreateValueSchema,
   workspaceDeleteValueSchema,
+  workspaceGitCheckoutBranchValueSchema,
+  workspaceGitCommitValueSchema,
+  workspaceGitPullValueSchema,
+  workspaceGitPushValueSchema,
+  workspaceGitStatusValueSchema,
   workspaceInsertBeforeValueSchema,
   workspaceInsertSessionBeforeValueSchema,
   workspaceListValueSchema,
   workspaceRenameValueSchema,
 } from '../api/workspace.schema.ts'
+import { authLogoutValueSchema, authMeValueSchema } from '../api/auth.schema.ts'
 import { skillListValueSchema } from '../api/skills.schema.ts'
 import {
   agentPresetCopyValueSchema, agentPresetListValueSchema, agentPresetOpenDocumentValueSchema,
@@ -115,11 +122,21 @@ export interface IApiClient {
   workspace: {
     list(payload: RequestPayload<'workspace.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.list'>>>
     create(payload: RequestPayload<'workspace.create'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.create'>>>
+    createGit(payload: RequestPayload<'workspace.createGit'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.createGit'>>>
     rename(payload: RequestPayload<'workspace.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.rename'>>>
     delete(payload: RequestPayload<'workspace.delete'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.delete'>>>
     insertBefore(payload: RequestPayload<'workspace.insertBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertBefore'>>>
     insertSessionBefore(payload: RequestPayload<'workspace.insertSessionBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertSessionBefore'>>>
     archiveSession(payload: RequestPayload<'workspace.archiveSession'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.archiveSession'>>>
+    gitStatus(payload: RequestPayload<'workspace.gitStatus'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.gitStatus'>>>
+    gitCommit(payload: RequestPayload<'workspace.gitCommit'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.gitCommit'>>>
+    gitPush(payload: RequestPayload<'workspace.gitPush'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.gitPush'>>>
+    gitPull(payload: RequestPayload<'workspace.gitPull'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.gitPull'>>>
+    gitCheckoutBranch(payload: RequestPayload<'workspace.gitCheckoutBranch'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.gitCheckoutBranch'>>>
+  }
+  auth: {
+    me(payload: RequestPayload<'auth.me'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'auth.me'>>>
+    logout(payload: RequestPayload<'auth.logout'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'auth.logout'>>>
   }
   skills: {
     list(payload: RequestPayload<'skill.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.list'>>>
@@ -193,11 +210,19 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.openPath': hostOpenPathValueSchema,
   'workspace.list': workspaceListValueSchema,
   'workspace.create': workspaceCreateValueSchema,
+  'workspace.createGit': workspaceCreateGitValueSchema,
   'workspace.rename': workspaceRenameValueSchema,
   'workspace.delete': workspaceDeleteValueSchema,
   'workspace.insertBefore': workspaceInsertBeforeValueSchema,
   'workspace.insertSessionBefore': workspaceInsertSessionBeforeValueSchema,
   'workspace.archiveSession': workspaceArchiveSessionValueSchema,
+  'workspace.gitStatus': workspaceGitStatusValueSchema,
+  'workspace.gitCommit': workspaceGitCommitValueSchema,
+  'workspace.gitPush': workspaceGitPushValueSchema,
+  'workspace.gitPull': workspaceGitPullValueSchema,
+  'workspace.gitCheckoutBranch': workspaceGitCheckoutBranchValueSchema,
+  'auth.me': authMeValueSchema,
+  'auth.logout': authLogoutValueSchema,
   'skill.list': skillListValueSchema,
   'agentPreset.list': agentPresetListValueSchema,
   'agentPreset.select': agentPresetSelectValueSchema,
@@ -446,11 +471,22 @@ export abstract class AbstractApiClient implements IApiClient {
   readonly workspace: IApiClient['workspace'] = {
     list: (payload, signal) => this.callUnary('workspace.list', payload, signal),
     create: (payload, signal) => this.callUnary('workspace.create', payload, signal),
+    createGit: (payload, signal) => this.callUnary('workspace.createGit', payload, signal),
     rename: (payload, signal) => this.callUnary('workspace.rename', payload, signal),
     delete: (payload, signal) => this.callUnary('workspace.delete', payload, signal),
     insertBefore: (payload, signal) => this.callUnary('workspace.insertBefore', payload, signal),
     insertSessionBefore: (payload, signal) => this.callUnary('workspace.insertSessionBefore', payload, signal),
     archiveSession: (payload, signal) => this.callUnary('workspace.archiveSession', payload, signal),
+    gitStatus: (payload, signal) => this.callUnary('workspace.gitStatus', payload, signal),
+    gitCommit: (payload, signal) => this.callUnary('workspace.gitCommit', payload, signal),
+    gitPush: (payload, signal) => this.callUnary('workspace.gitPush', payload, signal),
+    gitPull: (payload, signal) => this.callUnary('workspace.gitPull', payload, signal),
+    gitCheckoutBranch: (payload, signal) => this.callUnary('workspace.gitCheckoutBranch', payload, signal),
+  }
+
+  readonly auth: IApiClient['auth'] = {
+    me: (payload, signal) => this.callUnary('auth.me', payload, signal),
+    logout: (payload, signal) => this.callUnary('auth.logout', payload, signal),
   }
 
   readonly skills: IApiClient['skills'] = {

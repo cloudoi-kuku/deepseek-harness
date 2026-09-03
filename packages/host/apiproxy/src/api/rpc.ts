@@ -39,6 +39,9 @@ export interface RpcErrorDetailsMap {
   'workspace-attach-failed': { sessionId: SessionId; workspaceId: string }
   'workspace-not-found': { workspaceId: string }
   'workspace-invalid-path': { path: string }
+  'workspace-invalid-remote': { remoteUrl: string }
+  'workspace-source-unavailable': { kind: string }
+  'workspace-prepare-failed': { remoteUrl?: string | undefined; path?: string | undefined }
   'workspace-name-conflict': { name: string }
   'workspace-move-invalid': { workspaceId: string; sessionId: SessionId; beforeSessionId?: SessionId }
   'directory-unreadable': { path: string }
@@ -92,6 +95,13 @@ export interface RpcErrorDetailsMap {
   'subagent-not-resumable': { childSessionId: SessionId }
   'subagent-unauthorized': { childSessionId: SessionId }
   'subagent-delivery-unavailable': { childSessionId: SessionId }
+  'unauthenticated': {}
+  'forbidden': { workspaceId?: string }
+  'quota-exceeded': { kind: string; limit: number }
+  'rate-limited': { kind: string; limit: number }
+  'kill-switch': {}
+  'workspace-not-git': { workspaceId: string }
+  'workspace-checkout-unresolved': { reason: 'parent-required' | 'root-missing' }
   'internal': {}
 }
 

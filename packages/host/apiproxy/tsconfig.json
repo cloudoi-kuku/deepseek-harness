@@ -90,6 +90,18 @@
       "path": "../../workspace/workspace"
     },
     {
+      "path": "../../workspace/workspace-source"
+    },
+    {
+      "path": "../../identity/principal"
+    },
+    {
+      "path": "../../identity/hosted-limits"
+    },
+    {
+      "path": "../../workspace/workspace-source-git"
+    },
+    {
       "path": "../directory-picker"
     },
     {

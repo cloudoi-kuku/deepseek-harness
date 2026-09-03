@@ -8,7 +8,9 @@ DeepSeek Harness 的 Workspace 实体注册表（`ctx.workspaceRegistry`）：�
 
 ## 结构
 
-- `ctx.workspaceRegistry.create(path, title?)`：规范化 `path` 时使用 `fs.realpath`，拒绝不存在或非目录的路径，每个规范路径最多创建一条记录，并将新记录前置到持久 workspace 顺序。对同一路径重复调用会返回现有 workspace，且不改变其标题；不同路径可以共用显示标题。
+- `ctx.workspaceRegistry.create(path, title?)`：规范化 `path` 时使用 `fs.realpath`，拒绝不存在或非目录的路径，写入 `{ kind: 'local', path }` 作为 `source`，每个规范路径最多创建一条记录，并将新记录前置到持久 workspace 顺序。对同一路径重复调用会返回现有 workspace，且不改变其标题；不同路径可以共用显示标题。先克隆再调用 `workspace.create({ path })` 的托管叠加层继续走这条路径。
+- `ctx.workspaceRegistry.createGit({ remoteUrl, checkoutParent?, branch?, owner?, repo?, credentialId?, title? })`：需要 `ctx.workspaceSource`。解析远程、准备检出（clone 或 fetch），并写入不含令牌的 git `source`。对同一规范检出路径重复调用会返回现有 workspace，且不改变其标题。当 `ctx.principal` 已有认证器时，忽略 `checkoutParent`，父目录为 `hostedLimits.checkoutRoot/<tenantId>/<userId>`；没有认证器时必须提供 `checkoutParent`。新记录从绑定的 principal 盖上 `owner`。
+- `ctx.workspaceRegistry.listVisible()` / `getVisible(id)`：未注册认证器时等同于 `list`/`get`；否则只返回 `owner` 与当前 principal 匹配的记录（未绑定调用方时为空 / `undefined`）。
 - `ctx.workspaceRegistry.get(id)`/`list()`/`resolveByPath(path)`：由缓存提供的查找。`list()` 为同步操作，并遵循持久注册表顺序；`resolveByPath` 为异步操作，因为它采用相同的 `realpath` 规范化方式，并会拒绝缺失路径，而不是创建路径。
 - `ctx.workspaceRegistry.insertBefore(id, before?)`：在持久注册表顺序内移动一个已注册 Workspace，语义类似 DOM 的 insertBefore：插到锚点之前，省略锚点则追加到末尾。来源或锚点不在注册表中时拒绝且不写入；以自身为锚点或移动到当前位置时直接完成且不写入。返回的 id 列表是完整的已提交顺序。
 - `ctx.workspaceRegistry.delete(id)`：只移除 Workspace 注册记录、对应的持久顺序条目及会话归属记录。未知 id 返回 `false`，成功移除记录则返回 `true`。目录、用户文件、活跃会话和持久化会话日志绝不受影响，因此相关会话会进入 Ungrouped。表写入失败时会恢复原顺序和此前发布的实体。
@@ -42,3 +44,6 @@ DeepSeek Harness 的 Workspace 实体注册表（`ctx.workspaceRegistry`）：�
 
 - 会话删除与破坏性的文件夹移除是彼此独立且尚未提供的功能；删除 Workspace 注册记录绝不能替代二者（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
 - 头部索引会在启动时刷新，也会在 attach 必须解析未缓存持久 id 时刷新；另一进程执行的删除或造成的 cwd 损坏会在下次刷新或重启后被发现。
+- `createGit` 会存储可选的 `credentialId` 但不会查询它；克隆使用进程的 Git 环境。
+- 文件树、编辑器标签、diff、终端、预览、搜索和 SCM UI 属于后续 IDE 界面（见 [说明](../../../.agents/notes/implemented/architecture/2026-09-03-hosted-principal-isolation.zh.md)）。
+- 本包没有专用持久审计／授权表；owner 存在 workspace 记录上，会话日志与设置仍走既有缝，git 检出仍可丢弃。

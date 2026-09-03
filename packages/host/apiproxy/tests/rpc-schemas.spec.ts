@@ -21,6 +21,7 @@ import {
 } from '../src/api/host.schema.ts'
 import {
   workspaceArchiveSessionRequestSchema, workspaceArchiveSessionValueSchema,
+  workspaceCreateGitRequestSchema, workspaceCreateGitValueSchema,
   workspaceCreateRequestSchema, workspaceCreateValueSchema, workspaceIdSchema,
   workspaceDeleteRequestSchema, workspaceDeleteValueSchema,
   workspaceInsertBeforeRequestSchema, workspaceInsertBeforeValueSchema,
@@ -65,6 +66,9 @@ describe('rpcErrorSchema', () => {
     expect(rpcErrorSchema.parse({ code: 'workspace-attach-failed', message: 'm', details: { sessionId: 's', workspaceId: 'w' } }).code).toBe('workspace-attach-failed')
     expect(rpcErrorSchema.parse({ code: 'workspace-not-found', message: 'm', details: { workspaceId: 'w' } }).code).toBe('workspace-not-found')
     expect(rpcErrorSchema.parse({ code: 'workspace-invalid-path', message: 'm', details: { path: '/x' } }).code).toBe('workspace-invalid-path')
+    expect(rpcErrorSchema.parse({ code: 'workspace-invalid-remote', message: 'm', details: { remoteUrl: 'git@x' } }).code).toBe('workspace-invalid-remote')
+    expect(rpcErrorSchema.parse({ code: 'workspace-source-unavailable', message: 'm', details: { kind: 'git' } }).code).toBe('workspace-source-unavailable')
+    expect(rpcErrorSchema.parse({ code: 'workspace-prepare-failed', message: 'm', details: { remoteUrl: 'git@x' } }).code).toBe('workspace-prepare-failed')
     expect(rpcErrorSchema.parse({ code: 'workspace-name-conflict', message: 'm', details: { name: 'x' } }).code).toBe('workspace-name-conflict')
     expect(rpcErrorSchema.parse({ code: 'workspace-move-invalid', message: 'm', details: { workspaceId: 'w', sessionId: 's' } }).code).toBe('workspace-move-invalid')
     expect(rpcErrorSchema.parse({
@@ -384,6 +388,17 @@ describe('workspace domain schemas', () => {
     // The retired create-by-name spelling stays a clean schema rejection.
     expect(() => workspaceCreateRequestSchema.parse({ name: 'n' })).toThrow()
     expect(workspaceCreateValueSchema.parse({ workspace: view, created: false }).created).toBe(false)
+  })
+
+  it('createGit requires a remoteUrl and accepts an omitted checkoutParent', () => {
+    expect(workspaceCreateGitRequestSchema.parse({
+      remoteUrl: 'https://github.com/o/r.git',
+      checkoutParent: '/tmp',
+    }).remoteUrl).toBe('https://github.com/o/r.git')
+    expect(workspaceCreateGitRequestSchema.parse({ remoteUrl: 'https://github.com/o/r.git' }).remoteUrl)
+      .toBe('https://github.com/o/r.git')
+    expect(() => workspaceCreateGitRequestSchema.parse({})).toThrow()
+    expect(workspaceCreateGitValueSchema.parse({ workspace: view, created: true }).created).toBe(true)
   })
 
   it('rename requires a non-blank title (both refine arms)', () => {

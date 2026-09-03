@@ -170,6 +170,12 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
           result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't' }, created: true } },
         }
       },
+      async createGit(request) {
+        return {
+          rpcId: request.rpcId,
+          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't' }, created: true } },
+        }
+      },
       async rename(request) {
         return {
           rpcId: request.rpcId,
@@ -190,6 +196,29 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       },
       async archiveSession(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { archivedSessionIds: [request.payload.sessionId] } } }
+      },
+      async gitStatus(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { status: { branch: 'main', dirty: false, ahead: 0, behind: 0, conflicted: [] } } } }
+      },
+      async gitCommit(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { commit: 'abc' } } }
+      },
+      async gitPush(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { pushed: true as const } } }
+      },
+      async gitPull(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { conflicted: [] } } }
+      },
+      async gitCheckoutBranch(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { branch: request.payload.branch } } }
+      },
+    },
+    auth: {
+      async me(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { authenticated: false as const } } }
+      },
+      async logout(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { loggedOut: true as const } } }
       },
     },
     agentPresets: {

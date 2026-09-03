@@ -212,6 +212,7 @@ export class FakeApiClient implements IApiClient {
         : response
     )) as ReturnType<IApiClient['workspace']['list']>),
     create: (payload: unknown) => this.record('workspace.create', payload, this.onWorkspaceCreate(payload)),
+    createGit: (payload: unknown) => this.record('workspace.createGit', payload, this.onWorkspaceCreate(payload)),
     rename: (payload: unknown) => this.record('workspace.rename', payload, this.onWorkspaceRename(payload)),
     delete: (payload: unknown) => this.record('workspace.delete', payload, this.onWorkspaceDelete(payload)),
     insertBefore: (payload: unknown) =>
@@ -220,6 +221,20 @@ export class FakeApiClient implements IApiClient {
       this.record('workspace.insertSessionBefore', payload, this.onWorkspaceInsertSessionBefore(payload)),
     archiveSession: (payload: unknown) =>
       this.record('workspace.archiveSession', payload, this.onWorkspaceArchiveSession(payload)),
+    gitStatus: (payload: unknown) => this.record('workspace.gitStatus', payload, Promise.resolve(ok({
+      status: { branch: 'main', dirty: false, ahead: 0, behind: 0, conflicted: [] },
+    }))),
+    gitCommit: (payload: unknown) => this.record('workspace.gitCommit', payload, Promise.resolve(ok({ commit: 'abc' }))),
+    gitPush: (payload: unknown) => this.record('workspace.gitPush', payload, Promise.resolve(ok({ pushed: true as const }))),
+    gitPull: (payload: unknown) => this.record('workspace.gitPull', payload, Promise.resolve(ok({ conflicted: [] }))),
+    gitCheckoutBranch: (payload: unknown) => this.record('workspace.gitCheckoutBranch', payload, Promise.resolve(ok({
+      branch: (payload as { branch: string }).branch,
+    }))),
+  }
+
+  readonly auth: IApiClient['auth'] = {
+    me: (payload: unknown) => this.record('auth.me', payload, Promise.resolve(ok({ authenticated: false as const }))),
+    logout: (payload: unknown) => this.record('auth.logout', payload, Promise.resolve(ok({ loggedOut: true as const }))),
   }
 
   // Payloads stay `unknown` (lint-lane note above); response rows are the real

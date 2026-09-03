@@ -7,6 +7,7 @@
 import type { SessionsApi } from './sessions.ts'
 import type { HostApi } from './host.ts'
 import type { WorkspaceApi } from './workspace.ts'
+import type { AuthApi } from './auth.ts'
 import type { AgentPresetsApi } from './agent-presets.ts'
 import type { SkillsApi } from './skills.ts'
 import type { GoalsApi } from './goals.ts'
@@ -45,11 +46,19 @@ export interface RpcMethodMap {
   'host.openPath': HostApi['openPath']
   'workspace.list': WorkspaceApi['list']
   'workspace.create': WorkspaceApi['create']
+  'workspace.createGit': WorkspaceApi['createGit']
   'workspace.rename': WorkspaceApi['rename']
   'workspace.delete': WorkspaceApi['delete']
   'workspace.insertBefore': WorkspaceApi['insertBefore']
   'workspace.insertSessionBefore': WorkspaceApi['insertSessionBefore']
   'workspace.archiveSession': WorkspaceApi['archiveSession']
+  'workspace.gitStatus': WorkspaceApi['gitStatus']
+  'workspace.gitCommit': WorkspaceApi['gitCommit']
+  'workspace.gitPush': WorkspaceApi['gitPush']
+  'workspace.gitPull': WorkspaceApi['gitPull']
+  'workspace.gitCheckoutBranch': WorkspaceApi['gitCheckoutBranch']
+  'auth.me': AuthApi['me']
+  'auth.logout': AuthApi['logout']
   'skill.list': SkillsApi['list']
   'agentPreset.list': AgentPresetsApi['list']
   'agentPreset.select': AgentPresetsApi['select']

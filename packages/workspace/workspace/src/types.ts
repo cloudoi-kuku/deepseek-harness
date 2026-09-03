@@ -7,6 +7,14 @@
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { WorkspaceSourceRecord } from '@deepseek-ai/dsh-workspace-source'
+
+export type {
+  GitWorkspaceProvider,
+  GitWorkspaceSource,
+  LocalWorkspaceSource,
+  WorkspaceSourceRecord,
+} from '@deepseek-ai/dsh-workspace-source'
 
 /**
  * Identifies one workspace record. A generated uuid, never the path: path
@@ -15,14 +23,36 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 export type WorkspaceId = Branded<'WorkspaceId'>
 
 /**
- * One workspace: a stable id over an existing directory, a display title, and
- * an ordered candidate account of sessions. Membership requires both an id in
- * that account and a session header whose canonical cwd equals the workspace
- * path. Consumers only see this interface; the implementation stays private.
+ * Tenant+user pair stamped on a workspace created under an authenticated
+ * principal. Omitted on OSS/local records and on history-bootstrap rows.
+ */
+export interface WorkspaceOwner {
+  readonly tenantId: string
+  readonly userId: string
+}
+
+/**
+ * One workspace: a stable id over an existing directory, a display title, a
+ * discriminated checkout origin, and an ordered candidate account of sessions.
+ * Membership requires both an id in that account and a session header whose
+ * canonical cwd equals the workspace path. Consumers only see this interface;
+ * the implementation stays private.
  */
 export interface Workspace {
   /** Stable record id (generated uuid). */
   readonly id: WorkspaceId
+
+  /**
+   * Tenant+user that created the record when `ctx.principal` had authenticators.
+   * Omitted for OSS/local and history-bootstrap workspaces.
+   */
+  readonly owner?: WorkspaceOwner | undefined
+
+  /**
+   * Discriminated checkout origin. Local records store `{ kind: 'local', path }`;
+   * git records store remote identity and `checkoutPath`. Tokens are never stored.
+   */
+  readonly source: WorkspaceSourceRecord
 
   /**
    * Canonical directory path: the `fs.realpath` of the path given at create

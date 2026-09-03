@@ -70,6 +70,15 @@
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'
 
+    - id: workspace-source
+      name: '@deepseek-ai/dsh-workspace-source'
+
+    - id: workspace-source-local
+      name: '@deepseek-ai/dsh-workspace-source-local'
+
+    - id: workspace-source-git
+      name: '@deepseek-ai/dsh-workspace-source-git'
+
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
 

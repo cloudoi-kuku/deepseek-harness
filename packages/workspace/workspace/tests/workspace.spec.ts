@@ -10,14 +10,20 @@ import type { DomainChanged } from '@deepseek-ai/dsh-storage-domain'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import type { GitWorkspaceSource, WorkspaceSourceSpec } from '@deepseek-ai/dsh-workspace-source'
+import PrincipalService from '@deepseek-ai/dsh-principal'
+import HostedLimits from '@deepseek-ai/dsh-hosted-limits'
 import WorkspaceRegistry, {
+  WorkspaceCheckoutParentRequiredError,
+  WorkspaceForbiddenError,
   WorkspaceId,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
+  WorkspaceSourceUnavailableError,
 } from '../src/index.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from '../src/index.ts'
 
-const DOMAIN_VERSION = 2
+const DOMAIN_VERSION = 4
 
 const header = (id: string, cwd?: string, createdAt = 0): SessionHeader => ({
   version: 0,
@@ -133,6 +139,7 @@ function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:0
   return {
     path,
     title: basename(path),
+    source: { kind: 'local', path },
     sessionIds: sessionIds.map(SessionId),
     createdAt,
     updatedAt: createdAt,
@@ -222,6 +229,10 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     expect(result.load).not.toHaveBeenCalled()
     expect(result.inspect).not.toHaveBeenCalled()
     expect(result.registry.list().map(workspace => workspace.path)).toEqual([newer, older])
+    expect(result.registry.list().map(workspace => workspace.source)).toEqual([
+      { kind: 'local', path: newer },
+      { kind: 'local', path: older },
+    ])
     expect(result.registry.list().map(workspace => workspace.sessionIds)).toEqual([
       ['newer-only'],
       ['older-latest', 'older-first'],
@@ -363,6 +374,7 @@ describe('WorkspaceRegistry create and lookup', () => {
     const reused = await registry.create(alias, 'Ignored')
     expect(reused).toBe(first)
     expect(first.title).toBe('Original')
+    expect(first.source).toEqual({ kind: 'local', path: first.path })
     expect(registry.list()).toEqual([second, first])
     expect(storedState(pool).workspaceIds).toEqual([second.id, first.id])
     expect(await registry.resolveByPath(alias)).toBe(first)
@@ -940,5 +952,123 @@ describe('registry-global session archive', () => {
     )
     const upgraded = await harness({ pool: legacy })
     expect(upgraded.registry.archivedSessionIds).toEqual([])
+  })
+})
+
+describe('WorkspaceRegistry.createGit', () => {
+  it('rejects when ctx.workspaceSource is not mounted', async () => {
+    const { registry } = await harness()
+    await expect(registry.createGit({
+      remoteUrl: 'https://github.com/acme/demo.git',
+      checkoutParent: await makeDir('git-parent'),
+    })).rejects.toBeInstanceOf(WorkspaceSourceUnavailableError)
+  })
+
+  it('records a git source from the prepared checkout and never stores a token', async () => {
+    const checkout = await makeDir('acme-demo')
+    const spec: GitWorkspaceSource = {
+      kind: 'git',
+      provider: 'github',
+      owner: 'acme',
+      repo: 'demo',
+      branch: 'main',
+      remoteUrl: 'https://github.com/acme/demo.git',
+      checkoutPath: checkout,
+    }
+    const { ctx, registry } = await harness()
+    ctx.provide('workspaceSource', {
+      resolve: async (): Promise<WorkspaceSourceSpec> => spec,
+      prepare: async () => ({ cwd: checkout, spec }),
+    } as never)
+    const workspace = await registry.createGit({
+      remoteUrl: spec.remoteUrl,
+      checkoutParent: await makeDir('git-parent'),
+      title: 'Demo',
+    })
+    expect(workspace.title).toBe('Demo')
+    expect(workspace.path).toBe(checkout)
+    expect(workspace.source).toEqual({ ...spec, checkoutPath: checkout })
+    expect(JSON.stringify(workspace.source)).not.toMatch(/token|secret|password/i)
+    const reused = await registry.createGit({
+      remoteUrl: spec.remoteUrl,
+      checkoutParent: await makeDir('git-parent-2'),
+      title: 'Ignored',
+    })
+    expect(reused).toBe(workspace)
+    expect(workspace.title).toBe('Demo')
+  })
+
+  it('requires checkoutParent when no principal is bound', async () => {
+    const { ctx, registry } = await harness()
+    ctx.provide('workspaceSource', {
+      resolve: async () => { throw new Error('must not resolve') },
+      prepare: async () => { throw new Error('must not prepare') },
+    } as never)
+    await expect(registry.createGit({ remoteUrl: 'https://github.com/acme/demo.git' }))
+      .rejects.toBeInstanceOf(WorkspaceCheckoutParentRequiredError)
+  })
+})
+
+describe('WorkspaceRegistry principal isolation', () => {
+  it('stamps owner, filters list/get, and isolates git checkout under checkoutRoot', async () => {
+    const checkoutRoot = await makeDir('checkouts')
+    const checkout = await makeDir('acme-demo')
+    const spec: GitWorkspaceSource = {
+      kind: 'git',
+      provider: 'github',
+      owner: 'acme',
+      repo: 'demo',
+      branch: 'main',
+      remoteUrl: 'https://github.com/acme/demo.git',
+      checkoutPath: checkout,
+    }
+    const { ctx, registry } = await harness()
+    await ctx.plugin(PrincipalService)
+    await ctx.plugin(HostedLimits, { checkoutRoot, maxWorkspacesPerUser: 2 })
+    const aliceAuth = {
+      id: 'test',
+      identify: () => ({ tenantId: 't1', userId: 'alice' }),
+    }
+    ctx.principal.register(aliceAuth)
+    ctx.provide('workspaceSource', {
+      resolve: async (request: { checkoutParent: string }) => {
+        expect(request.checkoutParent).toBe(`${checkoutRoot}/t1/alice`)
+        return spec
+      },
+      prepare: async () => ({ cwd: checkout, spec }),
+    } as never)
+
+    const alice = { tenantId: 't1', userId: 'alice' }
+    const bob = { tenantId: 't1', userId: 'bob' }
+    const workspace = await ctx.principal.run(alice, () => registry.createGit({
+      remoteUrl: spec.remoteUrl,
+      checkoutParent: '/ignored-client-path',
+      title: 'Alice demo',
+    }))
+    expect(workspace.owner).toEqual(alice)
+    expect(ctx.principal.run(alice, () => registry.listVisible())).toEqual([workspace])
+    expect(ctx.principal.run(bob, () => registry.listVisible())).toEqual([])
+    expect(ctx.principal.run(bob, () => registry.getVisible(workspace.id))).toBeUndefined()
+    expect(ctx.principal.run(alice, () => registry.getVisible(workspace.id))).toBe(workspace)
+
+    const otherDir = await makeDir('bob-local')
+    await expect(ctx.principal.run(bob, () => registry.create(otherDir))).resolves.toMatchObject({
+      owner: bob,
+    })
+    await expect(ctx.principal.run(bob, () => registry.create(workspace.path)))
+      .rejects.toBeInstanceOf(WorkspaceForbiddenError)
+  })
+
+  it('enforces workspace quota for a new owner record', async () => {
+    const { ctx, registry } = await harness()
+    await ctx.plugin(PrincipalService)
+    await ctx.plugin(HostedLimits, { maxWorkspacesPerUser: 1 })
+    ctx.principal.register({ id: 'test', identify: () => undefined })
+    const alice = { tenantId: 't1', userId: 'alice' }
+    const first = await makeDir('one')
+    const second = await makeDir('two')
+    await ctx.principal.run(alice, () => registry.create(first))
+    await expect(ctx.principal.run(alice, () => registry.create(second)))
+      .rejects.toMatchObject({ code: 'quota-exceeded' })
   })
 })

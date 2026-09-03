@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -12,6 +13,8 @@ import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { DirectoryPickerError } from '@deepseek-ai/dsh-host-directory-picker'
 import type { DirectoryPickerCapability } from '@deepseek-ai/dsh-host-directory-picker'
+import WorkspaceSource from '@deepseek-ai/dsh-workspace-source'
+import * as WorkspaceSourceGit from '@deepseek-ai/dsh-workspace-source-git'
 import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
 import type { HostFrame, WorkspaceId } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { RpcRequest, RpcResponse } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
@@ -296,6 +299,7 @@ describe('workspace.create', () => {
     const missingResult = await api.workspace.create(request({ path: missing }))
     expect(missingResult.result).toMatchObject({ ok: false, error: { code: 'workspace-invalid-path' } })
     expect(existsSync(missing)).toBe(false)
+    expect(first.workspace.source).toEqual({ kind: 'local', path: existing })
   })
 
   it('adopts different paths that derive the same Workspace title', async () => {
@@ -317,6 +321,63 @@ describe('workspace.create', () => {
     expect(secondResult.workspace.workspaceId).not.toBe(firstResult.workspace.workspaceId)
     expect(expectOk(await api.workspace.list(request({}))).items.map(workspace => workspace.path))
       .toEqual([second, first])
+  })
+})
+
+describe('workspace.createGit', () => {
+  it('fails loud when the workspace-source seam is not mounted', async () => {
+    const { api, root } = await harness()
+    const response = await api.workspace.createGit(request({
+      remoteUrl: 'https://github.com/acme/demo.git',
+      checkoutParent: join(root, 'checkouts'),
+    }))
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-source-unavailable', details: { kind: 'git' } },
+    })
+  })
+
+  it('clones a local origin and returns a git source without a token', async () => {
+    const { api, ctx, root } = await harness()
+    await ctx.plugin(WorkspaceSource)
+    await ctx.plugin(WorkspaceSourceGit)
+    const origin = join(root, 'acme', 'demo')
+    mkdirSync(origin, { recursive: true })
+    execFileSync('git', ['init', '-b', 'main'], { cwd: origin })
+    execFileSync('git', ['config', 'user.email', 'api@test'], { cwd: origin })
+    execFileSync('git', ['config', 'user.name', 'api-test'], { cwd: origin })
+    writeFileSync(join(origin, 'README.md'), 'hello\n')
+    execFileSync('git', ['add', '.'], { cwd: origin })
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: origin })
+    const created = expectOk(await api.workspace.createGit(request({
+      remoteUrl: origin,
+      checkoutParent: join(root, 'checkouts'),
+    })))
+    expect(created.created).toBe(true)
+    expect(created.workspace.source).toMatchObject({
+      kind: 'git',
+      provider: 'generic',
+      owner: 'acme',
+      repo: 'demo',
+      branch: 'main',
+    })
+    expect(JSON.stringify(created.workspace)).not.toMatch(/token|ghp_|github_pat/i)
+    const repeated = expectOk(await api.workspace.createGit(request({
+      remoteUrl: origin,
+      checkoutParent: join(root, 'checkouts'),
+    })))
+    expect(repeated.created).toBe(false)
+    expect(repeated.workspace.workspaceId).toBe(created.workspace.workspaceId)
+    const status = expectOk(await api.workspace.gitStatus(request({
+      workspaceId: created.workspace.workspaceId,
+    })))
+    expect(status.status).toMatchObject({ branch: 'main', dirty: false, conflicted: [] })
+    const local = expectOk(await api.workspace.create(request({ path: root })))
+    const notGit = await api.workspace.gitStatus(request({ workspaceId: local.workspace.workspaceId }))
+    expect(notGit.result).toMatchObject({
+      ok: false,
+      error: { code: 'workspace-not-git' },
+    })
   })
 })
 

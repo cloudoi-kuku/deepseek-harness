@@ -83,11 +83,21 @@ function scriptedApi(overrides: {
     workspace: {
       list: r => ok(r, { items: [], archivedSessionIds: [] }),
       create: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' }, created: true }),
+      createGit: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' }, created: true }),
       rename: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       delete: r => ok(r, { deleted: true as const }),
       insertBefore: r => ok(r, { workspaceIds: [r.payload.workspaceId] }),
       insertSessionBefore: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       archiveSession: r => ok(r, { archivedSessionIds: [r.payload.sessionId] }),
+      gitStatus: r => ok(r, { status: { branch: 'main', dirty: false, ahead: 0, behind: 0, conflicted: [] } }),
+      gitCommit: r => ok(r, { commit: 'abc' }),
+      gitPush: r => ok(r, { pushed: true as const }),
+      gitPull: r => ok(r, { conflicted: [] }),
+      gitCheckoutBranch: r => ok(r, { branch: r.payload.branch }),
+    },
+    auth: {
+      me: r => ok(r, { authenticated: false as const }),
+      logout: r => ok(r, { loggedOut: true as const }),
     },
     skills: { list: r => ok(r, { skills: [] }), ...overrides.skills },
     agentPresets: {

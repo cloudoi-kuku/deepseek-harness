@@ -24,11 +24,20 @@ import { SessionQueryError, type SessionSearchCursor } from '@deepseek-ai/dsh-se
 import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import type { SubagentListEntry as CatalogSubagentListEntry } from '@deepseek-ai/dsh-subagent'
 import { isUserInvocable } from '@deepseek-ai/dsh-skill'
-import type { Workspace, WorkspaceRecord } from '@deepseek-ai/dsh-workspace'
+import type { GitWorkspaceSource, Workspace, WorkspaceRecord } from '@deepseek-ai/dsh-workspace'
 import {
   workspaceDomainState, workspaceRecord, WorkspaceId as brandWorkspaceId,
-  WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceUnknownSessionError,
+  WorkspaceCheckoutParentRequiredError, WorkspaceForbiddenError,
+  WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceSourceUnavailableError,
+  WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
+import { WorkspaceSourceError } from '@deepseek-ai/dsh-workspace-source'
+import type WorkspaceSource from '@deepseek-ai/dsh-workspace-source'
+import type {} from '@deepseek-ai/dsh-workspace-source'
+import { PrincipalUnauthenticatedError } from '@deepseek-ai/dsh-principal'
+import type {} from '@deepseek-ai/dsh-principal'
+import { HostedLimitsError } from '@deepseek-ai/dsh-hosted-limits'
+import type {} from '@deepseek-ai/dsh-hosted-limits'
 // Type-only: brings the `ctx.tools` Context merge into this program (viewFor reads presenters).
 import {
   InvalidPresetIdError, PresetExistsError, PresetMountError,
@@ -1019,9 +1028,11 @@ function workspaceView(workspace: Workspace): WorkspaceView {
     workspaceId: workspace.id,
     path: workspace.path,
     title: workspace.title,
+    source: workspace.source,
     sessionIds: [...workspace.sessionIds],
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
+    ...workspace.owner === undefined ? {} : { owner: workspace.owner },
   }
 }
 
@@ -1032,10 +1043,79 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
     workspaceId: workspaceId as WorkspaceId,
     path: record.path,
     title: record.title,
+    source: record.source,
     sessionIds: [...record.sessionIds],
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
+    ...record.owner === undefined ? {} : { owner: record.owner },
   }
+}
+
+/** Failure-only RPC response so policy mapping is assignable to every method's RpcResponse<T>. */
+type RpcFailure = { rpcId: RpcRequest<unknown>['rpcId']; result: { ok: false; error: RpcError } }
+
+/** Map principal/quota/isolation rejections onto Host RPC error codes. */
+function policyError(request: RpcRequest<unknown>, error: unknown): RpcFailure | undefined {
+  if (error instanceof PrincipalUnauthenticatedError) {
+    return { rpcId: request.rpcId, result: { ok: false, error: { code: 'unauthenticated', message: error.message, details: {} } } }
+  }
+  if (error instanceof WorkspaceForbiddenError) {
+    return {
+      rpcId: request.rpcId,
+      result: {
+        ok: false,
+        error: { code: 'forbidden', message: error.message, details: { workspaceId: error.workspaceId } },
+      },
+    }
+  }
+  if (error instanceof WorkspaceCheckoutParentRequiredError) {
+    return {
+      rpcId: request.rpcId,
+      result: {
+        ok: false,
+        error: { code: 'workspace-checkout-unresolved', message: error.message, details: { reason: 'parent-required' } },
+      },
+    }
+  }
+  if (error instanceof HostedLimitsError) {
+    if (error.code === 'kill-switch') {
+      return { rpcId: request.rpcId, result: { ok: false, error: { code: 'kill-switch', message: error.message, details: {} } } }
+    }
+    if (error.code === 'checkout-root-missing') {
+      return {
+        rpcId: request.rpcId,
+        result: {
+          ok: false,
+          error: { code: 'workspace-checkout-unresolved', message: error.message, details: { reason: 'root-missing' } },
+        },
+      }
+    }
+    if (error.code === 'quota-exceeded') {
+      return {
+        rpcId: request.rpcId,
+        result: {
+          ok: false,
+          error: {
+            code: 'quota-exceeded',
+            message: error.message,
+            details: { kind: error.details.kind ?? 'workspace', limit: error.details.limit ?? 0 },
+          },
+        },
+      }
+    }
+    return {
+      rpcId: request.rpcId,
+      result: {
+        ok: false,
+        error: {
+          code: 'rate-limited',
+          message: error.message,
+          details: { kind: error.details.kind ?? 'git-op', limit: error.details.limit ?? 0 },
+        },
+      },
+    }
+  }
+  return undefined
 }
 
 /**
@@ -1659,6 +1739,98 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   }
 
   /**
+   * Prepare the workspace origin, then return the local cwd the session
+   * header should carry. Compositions without `ctx.workspaceSource` keep
+   * using `workspace.path` for local records so `workspace.create({ path })`
+   * overlays stay valid; a git record without the seam fails loud.
+   * @param workspace - selected workspace, when the client named one.
+   * @param cwd - explicit session cwd when no workspace is named.
+   * @param fallback - Host cwd.
+   * @returns the directory to stamp on the new session header.
+   */
+  async function resolveCreateCwd(
+    workspace: Workspace | undefined,
+    cwd: string | undefined,
+    fallback: string,
+  ): Promise<string> {
+    if (workspace === undefined) return cwd ?? fallback
+    const source = ctx.get('workspaceSource')
+    if (source === undefined) {
+      if (workspace.source.kind === 'git') {
+        throw new WorkspaceSourceUnavailableError('prepare a git workspace')
+      }
+      return workspace.path
+    }
+    return (await source.prepare(workspace.source)).cwd
+  }
+
+  function ensureWorkspaceGit(payload: {
+    remoteUrl: string
+    checkoutParent?: string
+    branch?: string
+    owner?: string
+    repo?: string
+    credentialId?: string
+    title?: string
+  }): Promise<{ workspace: Workspace; created: boolean }> {
+    const operation = workspaceCreationChain.then(async () => {
+      const known = new Set(ctx.workspaceRegistry.list().map(workspace => workspace.id))
+      const workspace = await ctx.workspaceRegistry.createGit(payload)
+      return { workspace, created: !known.has(workspace.id) }
+    })
+    workspaceCreationChain = operation.then(() => undefined, () => undefined)
+    return operation
+  }
+
+  /**
+   * Resolve a visible git workspace, apply git-op limits, and run `fn`.
+   * @param request - inbound RPC request (for error correlation).
+   * @param workspaceId - workspace the git operation names.
+   * @param fn - git seam call against the recorded spec.
+   * @returns the RPC response.
+   */
+  async function gitOp<T>(
+    request: RpcRequest<unknown>,
+    workspaceId: WorkspaceId,
+    fn: (spec: GitWorkspaceSource, source: WorkspaceSource) => Promise<RpcResponse<T>>,
+  ): Promise<RpcResponse<T>> {
+    const workspace = ctx.workspaceRegistry.getVisible(brandWorkspaceId(workspaceId))
+    if (workspace === undefined) return workspaceNotFound(request, workspaceId)
+    if (workspace.source.kind !== 'git') {
+      return err(request, {
+        code: 'workspace-not-git',
+        message: `workspace "${workspaceId}" is not a git checkout`,
+        details: { workspaceId },
+      })
+    }
+    const source = ctx.get('workspaceSource')
+    if (source === undefined) {
+      return err(request, {
+        code: 'workspace-source-unavailable',
+        message: 'cannot run a git workspace operation: ctx.workspaceSource is not mounted',
+        details: { kind: 'git' },
+      })
+    }
+    try {
+      const owner = workspace.owner
+      if (owner !== undefined) ctx.get('hostedLimits')?.assertGitOp(owner)
+      else ctx.get('hostedLimits')?.assertNotKilled()
+      return await fn(workspace.source, source)
+    } catch (error: unknown) {
+      const mapped = policyError(request, error)
+      if (mapped !== undefined) return mapped
+      if (error instanceof WorkspaceSourceError) {
+        return err(request, {
+          code: 'workspace-prepare-failed',
+          message: error.message,
+          details: { path: workspace.path },
+        })
+      }
+      throw error
+    }
+  }
+
+  /**
    * Build the session.list baseline shared by listing and search visibility.
    * Attached sessions come from memory; servable cold sessions merge from
    * persistence, and the final order is newest-first.
@@ -2080,7 +2252,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const sessionId = request.payload.sessionId ?? `session-${randomUUID()}` as SessionId
         let workspace: Workspace | undefined
         if (request.payload.workspaceId !== undefined) {
-          workspace = ctx.workspaceRegistry.get(brandWorkspaceId(request.payload.workspaceId))
+          workspace = ctx.workspaceRegistry.getVisible(brandWorkspaceId(request.payload.workspaceId))
           if (workspace === undefined) {
             return err(request, {
               code: 'workspace-not-found',
@@ -2088,8 +2260,39 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               details: { workspaceId: request.payload.workspaceId },
             })
           }
+          try {
+            const owner = workspace.owner
+            if (owner !== undefined) {
+              ctx.get('hostedLimits')?.assertSessionCreate(owner, ctx.workspaceRegistry.liveSessionCount(owner))
+            } else {
+              ctx.get('hostedLimits')?.assertNotKilled()
+            }
+          } catch (error: unknown) {
+            const mapped = policyError(request, error)
+            if (mapped !== undefined) return mapped
+            throw error
+          }
         }
-        const cwd = workspace?.path ?? request.payload.cwd ?? defaults.cwd
+        let cwd: string
+        try {
+          cwd = await resolveCreateCwd(workspace, request.payload.cwd, defaults.cwd)
+        } catch (error: unknown) {
+          if (error instanceof WorkspaceSourceUnavailableError) {
+            return err(request, {
+              code: 'workspace-source-unavailable',
+              message: error.message,
+              details: { kind: 'git' },
+            })
+          }
+          if (error instanceof WorkspaceSourceError) {
+            return err(request, {
+              code: 'workspace-prepare-failed',
+              message: error.message,
+              details: workspace === undefined ? {} : { path: workspace.path },
+            })
+          }
+          throw error
+        }
         const requestedPreset = request.payload.agentPreset
         try {
           await ensureSession(sessionId, cwd, request.payload.sessionId !== undefined, requestedPreset)
@@ -2702,7 +2905,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     workspace: {
       list(request) {
         return Promise.resolve(ok(request, {
-          items: ctx.workspaceRegistry.list().map(workspaceView),
+          items: ctx.workspaceRegistry.listVisible().map(workspaceView),
           archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds],
         }))
       },
@@ -2713,6 +2916,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           const { workspace, created } = await ensureWorkspace(path)
           return ok(request, { workspace: workspaceView(workspace), created })
         } catch (error: unknown) {
+          const mapped = policyError(request, error)
+          if (mapped !== undefined) return mapped
           // The registry rejects a path that does not resolve to an existing
           // directory (realpath ENOENT / not-a-directory) — the business
           // error of the typed-path flow, surfaced as a validation failure.
@@ -2724,9 +2929,46 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
       },
 
+      async createGit(request) {
+        const { remoteUrl } = request.payload
+        try {
+          const { workspace, created } = await ensureWorkspaceGit(request.payload)
+          return ok(request, { workspace: workspaceView(workspace), created })
+        } catch (error: unknown) {
+          const mapped = policyError(request, error)
+          if (mapped !== undefined) return mapped
+          if (error instanceof WorkspaceSourceUnavailableError) {
+            return err(request, {
+              code: 'workspace-source-unavailable',
+              message: error.message,
+              details: { kind: 'git' },
+            })
+          }
+          if (error instanceof WorkspaceSourceError) {
+            if (error.code === 'WORKSPACE_SOURCE_INVALID_REQUEST') {
+              return err(request, {
+                code: 'workspace-invalid-remote',
+                message: error.message,
+                details: { remoteUrl },
+              })
+            }
+            return err(request, {
+              code: 'workspace-prepare-failed',
+              message: error.message,
+              details: { remoteUrl },
+            })
+          }
+          return err(request, {
+            code: 'workspace-prepare-failed',
+            message: `cannot create a git workspace from "${remoteUrl}": ${error instanceof Error ? error.message : String(error)}`,
+            details: { remoteUrl },
+          })
+        }
+      },
+
       async rename(request) {
         const { payload } = request
-        const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(payload.workspaceId))
+        const workspace = ctx.workspaceRegistry.getVisible(brandWorkspaceId(payload.workspaceId))
         if (workspace === undefined) return workspaceNotFound(request, payload.workspaceId)
         const title = payload.title.trim()
         // Uniqueness AND the same-title no-op both ride the create chain so
@@ -2758,6 +3000,16 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async delete(request) {
         const { workspaceId } = request.payload
+        if (ctx.workspaceRegistry.getVisible(brandWorkspaceId(workspaceId)) === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        try {
+          ctx.get('hostedLimits')?.assertNotKilled()
+        } catch (error: unknown) {
+          const mapped = policyError(request, error)
+          if (mapped !== undefined) return mapped
+          throw error
+        }
         const operation = workspaceCreationChain.then(() =>
           ctx.workspaceRegistry.delete(brandWorkspaceId(workspaceId)))
         workspaceCreationChain = operation.then(() => undefined, () => undefined)
@@ -2767,6 +3019,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async insertBefore(request) {
         const { workspaceId, beforeWorkspaceId } = request.payload
+        if (ctx.workspaceRegistry.getVisible(brandWorkspaceId(workspaceId)) === undefined) {
+          return workspaceNotFound(request, workspaceId)
+        }
+        if (beforeWorkspaceId !== undefined
+          && ctx.workspaceRegistry.getVisible(brandWorkspaceId(beforeWorkspaceId)) === undefined) {
+          return workspaceNotFound(request, beforeWorkspaceId)
+        }
         try {
           const workspaceIds = await ctx.workspaceRegistry.insertBefore(
             brandWorkspaceId(workspaceId),
@@ -2781,7 +3040,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
       async insertSessionBefore(request) {
         const { payload } = request
-        const workspace = ctx.workspaceRegistry.get(brandWorkspaceId(payload.workspaceId))
+        const workspace = ctx.workspaceRegistry.getVisible(brandWorkspaceId(payload.workspaceId))
         if (workspace === undefined) return workspaceNotFound(request, payload.workspaceId)
         try {
           await workspace.insertSessionBefore(payload.sessionId, payload.beforeSessionId)
@@ -2817,6 +3076,61 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async gitStatus(request) {
+        return await gitOp(request, request.payload.workspaceId, async (spec, source) => {
+          const status = await source.status(spec)
+          return ok(request, { status: { ...status, conflicted: [...status.conflicted] } })
+        })
+      },
+
+      async gitCommit(request) {
+        return await gitOp(request, request.payload.workspaceId, async (spec, source) => {
+          const result = await source.commit(spec, request.payload.message)
+          return ok(request, { commit: result.commit })
+        })
+      },
+
+      async gitPush(request) {
+        return await gitOp(request, request.payload.workspaceId, async (spec, source) => {
+          await source.push(spec)
+          return ok(request, { pushed: true as const })
+        })
+      },
+
+      async gitPull(request) {
+        return await gitOp(request, request.payload.workspaceId, async (spec, source) => {
+          const result = await source.pull(spec)
+          return ok(request, { conflicted: [...result.conflicted] })
+        })
+      },
+
+      async gitCheckoutBranch(request) {
+        return await gitOp(request, request.payload.workspaceId, async (spec, source) => {
+          await source.checkoutBranch(spec, request.payload.branch)
+          return ok(request, { branch: request.payload.branch })
+        })
+      },
+    },
+
+    auth: {
+      me(request) {
+        const principal = ctx.get('principal')
+        const current = principal?.current()
+        if (current === undefined) {
+          return Promise.resolve(ok(request, { authenticated: false as const }))
+        }
+        return Promise.resolve(ok(request, {
+          authenticated: true as const,
+          tenantId: current.tenantId,
+          userId: current.userId,
+          ...current.product === undefined ? {} : { product: current.product },
+        }))
+      },
+
+      logout(request) {
+        return Promise.resolve(ok(request, { loggedOut: true as const }))
       },
     },
 

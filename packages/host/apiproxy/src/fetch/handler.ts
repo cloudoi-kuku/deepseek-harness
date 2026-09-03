@@ -36,13 +36,20 @@ import {
 } from '../api/host.schema.ts'
 import {
   workspaceArchiveSessionRequestSchema,
+  workspaceCreateGitRequestSchema,
   workspaceCreateRequestSchema,
   workspaceDeleteRequestSchema,
+  workspaceGitCheckoutBranchRequestSchema,
+  workspaceGitCommitRequestSchema,
+  workspaceGitPullRequestSchema,
+  workspaceGitPushRequestSchema,
+  workspaceGitStatusRequestSchema,
   workspaceInsertBeforeRequestSchema,
   workspaceInsertSessionBeforeRequestSchema,
   workspaceListRequestSchema,
   workspaceRenameRequestSchema,
 } from '../api/workspace.schema.ts'
+import { authLogoutRequestSchema, authMeRequestSchema } from '../api/auth.schema.ts'
 import { skillListRequestSchema } from '../api/skills.schema.ts'
 import {
   agentPresetCopyRequestSchema, agentPresetListRequestSchema, agentPresetOpenDocumentRequestSchema,
@@ -111,11 +118,19 @@ const UNARY_ROUTES: UnaryRoutes = {
   'host.openPath': { schema: hostOpenPathRequestSchema, invoke: (api, r, signal) => api.host.openPath(r, signal) },
   'workspace.list': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.list(r) },
   'workspace.create': { schema: workspaceCreateRequestSchema, invoke: (api, r) => api.workspace.create(r) },
+  'workspace.createGit': { schema: workspaceCreateGitRequestSchema, invoke: (api, r) => api.workspace.createGit(r) },
   'workspace.rename': { schema: workspaceRenameRequestSchema, invoke: (api, r) => api.workspace.rename(r) },
   'workspace.delete': { schema: workspaceDeleteRequestSchema, invoke: (api, r) => api.workspace.delete(r) },
   'workspace.insertBefore': { schema: workspaceInsertBeforeRequestSchema, invoke: (api, r) => api.workspace.insertBefore(r) },
   'workspace.insertSessionBefore': { schema: workspaceInsertSessionBeforeRequestSchema, invoke: (api, r) => api.workspace.insertSessionBefore(r) },
   'workspace.archiveSession': { schema: workspaceArchiveSessionRequestSchema, invoke: (api, r) => api.workspace.archiveSession(r) },
+  'workspace.gitStatus': { schema: workspaceGitStatusRequestSchema, invoke: (api, r) => api.workspace.gitStatus(r) },
+  'workspace.gitCommit': { schema: workspaceGitCommitRequestSchema, invoke: (api, r) => api.workspace.gitCommit(r) },
+  'workspace.gitPush': { schema: workspaceGitPushRequestSchema, invoke: (api, r) => api.workspace.gitPush(r) },
+  'workspace.gitPull': { schema: workspaceGitPullRequestSchema, invoke: (api, r) => api.workspace.gitPull(r) },
+  'workspace.gitCheckoutBranch': { schema: workspaceGitCheckoutBranchRequestSchema, invoke: (api, r) => api.workspace.gitCheckoutBranch(r) },
+  'auth.me': { schema: authMeRequestSchema, invoke: (api, r) => api.auth.me(r) },
+  'auth.logout': { schema: authLogoutRequestSchema, invoke: (api, r) => api.auth.logout(r) },
   'skill.list': { schema: skillListRequestSchema, invoke: (api, r) => api.skills.list(r) },
   'agentPreset.list': { schema: agentPresetListRequestSchema, invoke: (api, r) => api.agentPresets.list(r) },
   'agentPreset.select': { schema: agentPresetSelectRequestSchema, invoke: (api, r) => api.agentPresets.select(r) },
@@ -174,7 +189,6 @@ function fullResponse(narrow: RpcResponse<unknown>): Response {
  */
 // K appears once in the signature but ties the UNARY_ROUTES[K] row lookup to its own
 // schema/invoke pairing; a union parameter degrades the row to an uninvokable intersection.
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters
 async function handleUnary<K extends keyof RpcMethodMap>(
   api: ApiProxy, method: K, message: ClientRequest, signal: AbortSignal,
 ): Promise<Response> {
