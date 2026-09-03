@@ -12,6 +12,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { launchTokenFromRequest } from './launch-token.mjs'
+import { handleCorenet } from './corenet-bridge.mjs'
 
 const PORT = Number(process.env.GENERATE_PORT ?? 3081)
 const TIMEOUT_MS = Number(process.env.GENERATE_TIMEOUT_MS ?? 180_000)
@@ -43,6 +44,10 @@ async function handle(req, res) {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (req.method === 'GET' && url.pathname === '/health') {
       send(res, 200, { ok: true })
+      return
+    }
+    if (url.pathname.startsWith('/corenet/')) {
+      await handleCorenet(req, res, url)
       return
     }
     if (req.method === 'POST' && url.pathname === '/generate') {

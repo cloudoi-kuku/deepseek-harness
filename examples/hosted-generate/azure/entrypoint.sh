@@ -8,7 +8,7 @@ export HOME="${HOME:-/home/node}"
 export DSH_HOME="${DSH_HOME:-${HOME}/.dsh}"
 export LLM_API_KEY="${LLM_API_KEY:-bridge}"
 DSH_PORT="${DSH_PORT:-3080}"
-TRUSTED_HOST="${TRUSTED_HOST:-ca-envon-generate-poc.calmtree-51c0c4fa.eastus2.azurecontainerapps.io}"
+TRUSTED_HOST="${TRUSTED_HOST:-harness.cloudoi.io}"
 
 mkdir -p "${DSH_HOME}" /workspace
 cd /workspace
@@ -21,7 +21,13 @@ fi
 node /app/llm-bridge.mjs &
 BRIDGE_PID=$!
 
-dsh --profile web --patch /app/grok.patch.yml --no-open --port "${DSH_PORT}" --trusted-host "${TRUSTED_HOST}" &
+TRUST_FLAGS=""
+for host in ${TRUSTED_HOST}; do
+  TRUST_FLAGS="${TRUST_FLAGS} --trusted-host ${host}"
+done
+
+# shellcheck disable=SC2086
+dsh --profile web --patch /app/grok.patch.yml --no-open --port "${DSH_PORT}" ${TRUST_FLAGS} &
 DSH_PID=$!
 
 node /app/generate-server.mjs &

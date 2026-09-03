@@ -30,8 +30,12 @@ CoreNet 与 Hosting 都需要让已登录用户描述网站或应用，并得到
 
 **挂载 bash 与完整编码 spine。** 第一刀否决：仅文件生成即可在零子进程成本下证明占用、擦除与 HTTP 路径。在接受 token 上限与隔离之后，bash 可以作为组合变更加回来。
 
+**在 `Dockerfile.web` 中从 npm 安装已发布的 `@deepseek-ai/dsh`。** 否决用于 Envon web 镜像：该版本不含 `workspace-source-git` 或 `workspace.createGit`。镜像从本仓库构建 `@deepseek-ai/dsh`（`pnpm --filter @deepseek-ai/dsh deploy`），再复制 CoreNet overlay。
+
+**在线上 Envon 组合中挂载 `principal-hmac`。** 本镜像否决：操作者 `GENERATE_TOKEN` 没有 launch cookie，认证器会让 `listVisible` 变空。线上仍用 `launch-token.mjs` 的 overlay HMAC 与 `workspace.create({ path })` 钉住工作区。hosted principal 是以后的 patch。
+
 ## Consequences
 
 调用方（CoreNet `AiBuildController`、Hosting `EnvonAiSiteBuilder`）可以 POST prompt 并收到文件，而不必让 dsh 了解 SWA、Caddy 或 GitHub。CI 可以在没有 `DEEPSEEK_API_KEY` 或 Azure 的情况下完整行使该路径。该 POC 不能在同一进程中保护两个互不信任的客户；生产隔离仍是以后的 provider 替换。若组合把 adapter 指向付费端点且不用 session 上限，现场模型花费仍可能失控 — 这些上限是本包拥有的成本控制。
 
-Envon Container App `ca-envon-generate-poc`（`examples/hosted-generate/azure/Dockerfile.web`）在该代理之后提供已发布的 `dsh web` UI，以及 `/generate` 与 `/sessions/` 上的 generate HTTP 约定。Generate 以仅文件系统工具（`generate.patch.yml`）运行 `dsh --profile headless`。默认模型是 Grok，经 `llm-bridge.mjs`：设置 `FOUNDRY_API_KEY` 时走 Foundry 部署 `grok-4-3`（CAE VNet 私有 PE），否则用 `XAI_API_KEY` 走 `https://api.x.ai/v1`。扩缩容仍为 `minReplicas=0` / `maxReplicas=1`。无密钥 generate mock（`Dockerfile` + `server.mjs`）不变。CoreNet 把返回的文件映射叠到自己的 scaffold 上，并仍是 GitHub 写入者。
+Envon Container App `ca-envon-generate-poc`（`examples/hosted-generate/azure/Dockerfile.web`，仓库根目录为构建上下文）在该代理之后提供从本仓库源码构建的 `dsh web`，以及 `/generate` 与 `/sessions/` 上的 generate HTTP 约定。`workspace-github.mjs` 把 CoreNet GitHub grant 克隆到 `/workspace`，再用 `workspace.create({ path })` 钉住。`generate-server.mjs` 还提供 `/corenet/publish` 与 `/corenet/database`（`corenet-bridge.mjs`）。Generate 以仅文件系统工具（`generate.patch.yml`）运行 `dsh --profile headless`。默认模型是 Grok，经 `llm-bridge.mjs`：设置 `FOUNDRY_API_KEY` 时走 Foundry 部署 `grok-4-3`（CAE VNet 私有 PE），否则用 `XAI_API_KEY` 走 `https://api.x.ai/v1`。默认 `--trusted-host` 为 `harness.cloudoi.io`。线上组合不挂载 `principal-hmac`。扩缩容仍为 `minReplicas=0` / `maxReplicas=1`。无密钥 generate mock（`Dockerfile` + `server.mjs`）不变。generate 产物仍由 CoreNet 写 GitHub；web overlay 也会把用户的 grant 克隆为 cwd。

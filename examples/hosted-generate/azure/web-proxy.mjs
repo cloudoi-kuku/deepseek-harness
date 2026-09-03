@@ -7,12 +7,8 @@
  */
 
 import http from 'node:http'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { launchTokenFromRequest, validateLaunchToken } from './launch-token.mjs'
-
-const GENERATE_PAGE = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'generate.html'))
+import { launchTokenFromRequest, MAXIMUM_LIFETIME_S, validateLaunchToken } from './launch-token.mjs'
+import { adoptDshWorkspace, ensureGithubWorkspace, WORKSPACE_DIR } from './workspace-github.mjs'
 
 const PORT = Number(process.env.PORT ?? 8080)
 const TOKEN = process.env.GENERATE_TOKEN ?? ''
@@ -23,7 +19,18 @@ const GENERATE = { hostname: '127.0.0.1', port: GENERATE_PORT }
 const LAUNCH_SECRET = process.env.HARNESS_LAUNCH_SECRET ?? ''
 const CORENET_ORIGIN = (process.env.HARNESS_CORENET_ORIGIN ?? '').replace(/\/$/, '')
 
+let pinInflight = null
+let pinnedTitle = null
+
 const server = http.createServer((req, res) => {
+  void handle(req, res)
+})
+
+/**
+ * @param {http.IncomingMessage} req
+ * @param {http.ServerResponse} res
+ */
+async function handle(req, res) {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1')
   if (req.method === 'GET' && url.pathname === '/health') {
     json(res, 200, { ok: true })
@@ -31,10 +38,17 @@ const server = http.createServer((req, res) => {
   }
   const queryLaunch = url.searchParams.get('launch') ?? ''
   if (queryLaunch !== '' && validateLaunchToken(queryLaunch, LAUNCH_SECRET)) {
-    const dest = url.pathname === '/' || url.pathname === '/new' ? '/new' : url.pathname
+    try {
+      await pinGithubWorkspace(queryLaunch)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'workspace mount failed'
+      const code = /dsh workspace pin/.test(message) ? 'WORKSPACE_PIN_FAILED' : 'WORKSPACE_MOUNT_FAILED'
+      json(res, 502, { error: { code, message } })
+      return
+    }
     res.writeHead(302, {
-      location: dest,
-      'set-cookie': `harness_launch=${encodeURIComponent(queryLaunch)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=28800`,
+      location: '/',
+      'set-cookie': `harness_launch=${encodeURIComponent(queryLaunch)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${String(MAXIMUM_LIFETIME_S)}`,
     })
     res.end()
     return
@@ -52,14 +66,52 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ error: { code: 'GENERATE_UNAUTHORIZED', message: 'CoreNet launch token or operator token is required' } }))
     return
   }
-  if (req.method === 'GET' && url.pathname === '/new') {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end(GENERATE_PAGE)
+  if (req.method === 'GET' && (url.pathname === '/new' || url.pathname === '/new/')) {
+    res.writeHead(302, { location: '/' })
+    res.end()
     return
+  }
+  if (req.method === 'GET' && url.pathname === '/') {
+    try {
+      const launch = launchTokenFromRequest(req)
+      if (LAUNCH_SECRET !== '' && validateLaunchToken(launch, LAUNCH_SECRET)) {
+        await pinGithubWorkspace(launch)
+      } else {
+        await pinDshWorkspace('workspace')
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'workspace pin failed'
+      json(res, 502, { error: { code: 'WORKSPACE_PIN_FAILED', message } })
+      return
+    }
   }
   const generate = url.pathname === '/generate' || url.pathname.startsWith('/sessions/')
   forward(req, res, generate ? GENERATE : UPSTREAM)
-})
+}
+
+/**
+ * Clone the GitHub grant for this launch token and register it as the dsh workspace.
+ * @param {string} launchToken
+ */
+async function pinGithubWorkspace(launchToken) {
+  const grant = await ensureGithubWorkspace(launchToken)
+  await pinDshWorkspace(`${grant.owner}/${grant.name}`)
+}
+
+/**
+ * Idempotent dsh `workspace.create` for `/workspace`. Concurrent callers share one attempt.
+ * @param {string} title
+ */
+function pinDshWorkspace(title) {
+  if (pinnedTitle === title) return Promise.resolve()
+  if (pinInflight !== null) return pinInflight
+  pinInflight = adoptDshWorkspace({ path: WORKSPACE_DIR, title }).then(() => {
+    pinnedTitle = title
+  }).finally(() => {
+    pinInflight = null
+  })
+  return pinInflight
+}
 
 server.on('upgrade', (req, socket, head) => {
   if (!authorized(req)) {

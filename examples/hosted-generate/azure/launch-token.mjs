@@ -1,14 +1,18 @@
 /**
  * HMAC launch token shared with CoreNet HarnessLaunchToken.
  * Binds a harness session to a CoreNet/Hosting account; it is not a second login.
+ * Reusable until exp (cookie + CoreNet from-harness Bearer). Email is not a claim.
  */
 
 import { createHmac, timingSafeEqual as cryptoTimingSafeEqual } from 'node:crypto'
 
+/** Matches CoreNet `HarnessLaunchToken.MaximumLifetime`. */
+export const MAXIMUM_LIFETIME_S = 10 * 60
+
 /**
  * @param {string} token
  * @param {string} secret
- * @returns {{ tid: string, uid: string, email?: string, product?: string, exp: number } | null}
+ * @returns {{ tid: string, uid: string, product?: string, exp: number, brief?: string } | null}
  */
 export function validateLaunchToken(token, secret) {
   if (!token || !secret) return null
@@ -22,6 +26,7 @@ export function validateLaunchToken(token, secret) {
     const claims = JSON.parse(Buffer.from(pad(payload), 'base64').toString('utf8'))
     if (!claims?.tid || !claims?.uid) return null
     if (typeof claims.exp !== 'number' || claims.exp < Date.now() / 1000) return null
+    if (claims.exp > Date.now() / 1000 + MAXIMUM_LIFETIME_S) return null
     return claims
   } catch {
     return null

@@ -1,6 +1,8 @@
 *
 !server.mjs
 !web-proxy.mjs
+!workspace-github.mjs
+!corenet-bridge.mjs
 !llm-bridge.mjs
 !grok.patch.yml
 !generate-server.mjs
