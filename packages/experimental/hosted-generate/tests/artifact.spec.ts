@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { collectArtifact } from '../src/artifact.ts'
-import { HostedGenerateError } from '../src/error.ts'
 
 const roots: string[] = []
 
@@ -47,7 +46,7 @@ describe('collectArtifact', () => {
       maxArtifactBytes: 100,
       maxFiles: 8,
       maxFileBytes: 4,
-    })).rejects.toMatchObject<Partial<HostedGenerateError>>({
+    })).rejects.toMatchObject({
       code: 'GENERATE_TOO_LARGE',
     })
   })
@@ -60,7 +59,7 @@ describe('collectArtifact', () => {
       maxArtifactBytes: 100,
       maxFiles: 1,
       maxFileBytes: 10,
-    })).rejects.toMatchObject<Partial<HostedGenerateError>>({
+    })).rejects.toMatchObject({
       code: 'GENERATE_TOO_LARGE',
     })
   })
@@ -87,7 +86,7 @@ describe('collectArtifact', () => {
       maxArtifactBytes: 6,
       maxFiles: 8,
       maxFileBytes: 10,
-    })).rejects.toMatchObject<Partial<HostedGenerateError>>({
+    })).rejects.toMatchObject({
       code: 'GENERATE_TOO_LARGE',
     })
   })

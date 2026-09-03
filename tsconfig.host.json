@@ -91,6 +91,8 @@
     "apps/cli/tests/**/*.ts",
     "examples/*/src/**/*.ts",
     "examples/*/start.ts",
+    "examples/*/boot.ts",
+    "examples/*/serve.ts",
     "examples/*/tests/**/*.ts",
     "packages/*/*/tests/**/*.ts",
     "scripts/**/*.ts",

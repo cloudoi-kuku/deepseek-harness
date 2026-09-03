@@ -66,8 +66,6 @@ async function setup(
   ctx.llm.registerAdapter(['mock'], adapter)
   const { http: _http, ...serviceConfig } = config
   const fiber = await ctx.plugin(HostedGenerateService, {
-    provider: 'mock',
-    model: 'mock',
     workspaceParent: root,
     sessionTimeoutMs: 5_000,
     ...serviceConfig,
