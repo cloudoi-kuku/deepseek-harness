@@ -36,6 +36,15 @@ export type WorkspaceSourceRecord = LocalWorkspaceSource | GitWorkspaceSource
 export type WorkspaceId = Branded<'WorkspaceId'>
 
 /**
+ * Tenant+user pair stamped on a workspace created under an authenticated
+ * principal. Omitted on OSS/local records and on history-bootstrap rows.
+ */
+export interface WorkspaceOwner {
+  readonly tenantId: string
+  readonly userId: string
+}
+
+/**
  * One workspace: a stable id over an existing directory, a display title, and
  * an ordered candidate account of sessions. Membership requires both an id in
  * that account and a session header whose canonical cwd equals the workspace
@@ -44,6 +53,12 @@ export type WorkspaceId = Branded<'WorkspaceId'>
 export interface Workspace {
   /** Stable record id (generated uuid). */
   readonly id: WorkspaceId
+
+  /**
+   * Tenant+user that created the record when `ctx.principal` had authenticators.
+   * Omitted for OSS/local and history-bootstrap workspaces.
+   */
+  readonly owner?: WorkspaceOwner | undefined
 
   /**
    * Canonical directory path: the `fs.realpath` of the path given at create

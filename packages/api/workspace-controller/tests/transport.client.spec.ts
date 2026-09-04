@@ -18,6 +18,7 @@ import {
   type WorkspaceRemote,
 } from '../src/client/index.ts'
 import type {
+  GitWorkspaceStatusValue,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateGitRequest,
@@ -26,6 +27,10 @@ import type {
   WorkspaceDeleteRequest,
   WorkspaceDeleteValue,
   WorkspaceFollowFrame,
+  WorkspaceGitCheckoutBranchRequest,
+  WorkspaceGitCommitRequest,
+  WorkspaceGitStatusRequest,
+  WorkspaceGitSyncRequest,
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
@@ -145,6 +150,28 @@ class ScriptedWorkspaceRemote implements WorkspaceRemote {
     throw new Error('unused')
   }
 
+  gitStatus(_request: WorkspaceGitStatusRequest): Promise<RemoteResult<{ status: GitWorkspaceStatusValue }>> {
+    throw new Error('unused')
+  }
+
+  gitCommit(_request: WorkspaceGitCommitRequest): Promise<RemoteResult<{ committed: true }>> {
+    throw new Error('unused')
+  }
+
+  gitPush(_request: WorkspaceGitSyncRequest): Promise<RemoteResult<{ pushed: true }>> {
+    throw new Error('unused')
+  }
+
+  gitPull(_request: WorkspaceGitSyncRequest): Promise<RemoteResult<{ pulled: true }>> {
+    throw new Error('unused')
+  }
+
+  gitCheckoutBranch(
+    _request: WorkspaceGitCheckoutBranchRequest,
+  ): Promise<RemoteResult<{ branch: string }>> {
+    throw new Error('unused')
+  }
+
   async *follow(signal = new AbortController().signal): AsyncIterable<WorkspaceFollowFrame> {
     const generation = this.generations[this.calls++]
     if (generation === undefined) throw new Error('no scripted Workspace generation')
@@ -168,7 +195,7 @@ class CommandWorkspaceRemote implements WorkspaceRemote {
   })))
 
   readonly createGit = vi.fn<WorkspaceRemote['createGit']>(request => Promise.resolve(remoteOk({
-    workspace: workspace('git-created', { path: request.checkoutParent }),
+    workspace: workspace('git-created', { path: request.checkoutParent ?? request.remoteUrl }),
     created: true,
   })))
 
@@ -188,6 +215,26 @@ class CommandWorkspaceRemote implements WorkspaceRemote {
 
   readonly archiveSession = vi.fn<WorkspaceRemote['archiveSession']>(request => Promise.resolve(remoteOk({
     archivedSessionIds: [request.sessionId],
+  })))
+
+  readonly gitStatus = vi.fn<WorkspaceRemote['gitStatus']>(() => Promise.resolve(remoteOk({
+    status: { branch: 'main', dirty: false, ahead: 0, behind: 0 },
+  })))
+
+  readonly gitCommit = vi.fn<WorkspaceRemote['gitCommit']>(() => Promise.resolve(remoteOk({
+    committed: true as const,
+  })))
+
+  readonly gitPush = vi.fn<WorkspaceRemote['gitPush']>(() => Promise.resolve(remoteOk({
+    pushed: true as const,
+  })))
+
+  readonly gitPull = vi.fn<WorkspaceRemote['gitPull']>(() => Promise.resolve(remoteOk({
+    pulled: true as const,
+  })))
+
+  readonly gitCheckoutBranch = vi.fn<WorkspaceRemote['gitCheckoutBranch']>(request => Promise.resolve(remoteOk({
+    branch: request.branch,
   })))
 
   async *follow(_signal?: AbortSignal): AsyncIterable<WorkspaceFollowFrame> {}

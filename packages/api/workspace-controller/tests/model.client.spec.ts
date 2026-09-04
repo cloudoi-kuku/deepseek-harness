@@ -3,6 +3,7 @@ import {
   ClientWorkspaceModel, type WorkspaceRemote,
 } from '../src/client/index.ts'
 import type {
+  GitWorkspaceStatusValue,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateGitRequest,
@@ -11,6 +12,10 @@ import type {
   WorkspaceDeleteRequest,
   WorkspaceDeleteValue,
   WorkspaceFollowFrame,
+  WorkspaceGitCheckoutBranchRequest,
+  WorkspaceGitCommitRequest,
+  WorkspaceGitStatusRequest,
+  WorkspaceGitSyncRequest,
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
@@ -91,6 +96,17 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
     request: WorkspaceArchiveSessionRequest,
   ) => Promise<RemoteResult<WorkspaceArchiveValue>> = request =>
     Promise.resolve(remoteOk({ archivedSessionIds: [request.sessionId] }))
+  onGitStatus: (_request: WorkspaceGitStatusRequest) => Promise<RemoteResult<{ status: GitWorkspaceStatusValue }>> =
+    () => Promise.resolve(remoteOk({ status: { branch: 'main', dirty: false, ahead: 0, behind: 0 } }))
+  onGitCommit: (_request: WorkspaceGitCommitRequest) => Promise<RemoteResult<{ committed: true }>> =
+    () => Promise.resolve(remoteOk({ committed: true as const }))
+  onGitPush: (_request: WorkspaceGitSyncRequest) => Promise<RemoteResult<{ pushed: true }>> =
+    () => Promise.resolve(remoteOk({ pushed: true as const }))
+  onGitPull: (_request: WorkspaceGitSyncRequest) => Promise<RemoteResult<{ pulled: true }>> =
+    () => Promise.resolve(remoteOk({ pulled: true as const }))
+  onGitCheckoutBranch: (
+    request: WorkspaceGitCheckoutBranchRequest,
+  ) => Promise<RemoteResult<{ branch: string }>> = request => Promise.resolve(remoteOk({ branch: request.branch }))
 
   create(request: WorkspaceCreateRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
     this.record('create', request)
@@ -125,6 +141,33 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
     this.record('archiveSession', request)
     return this.onArchiveSession(request)
+  }
+
+  gitStatus(request: WorkspaceGitStatusRequest): Promise<RemoteResult<{ status: GitWorkspaceStatusValue }>> {
+    this.record('gitStatus', request)
+    return this.onGitStatus(request)
+  }
+
+  gitCommit(request: WorkspaceGitCommitRequest): Promise<RemoteResult<{ committed: true }>> {
+    this.record('gitCommit', request)
+    return this.onGitCommit(request)
+  }
+
+  gitPush(request: WorkspaceGitSyncRequest): Promise<RemoteResult<{ pushed: true }>> {
+    this.record('gitPush', request)
+    return this.onGitPush(request)
+  }
+
+  gitPull(request: WorkspaceGitSyncRequest): Promise<RemoteResult<{ pulled: true }>> {
+    this.record('gitPull', request)
+    return this.onGitPull(request)
+  }
+
+  gitCheckoutBranch(
+    request: WorkspaceGitCheckoutBranchRequest,
+  ): Promise<RemoteResult<{ branch: string }>> {
+    this.record('gitCheckoutBranch', request)
+    return this.onGitCheckoutBranch(request)
   }
 
   async *follow(_signal?: AbortSignal): AsyncGenerator<WorkspaceFollowFrame> {}

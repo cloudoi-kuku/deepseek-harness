@@ -18,31 +18,10 @@
       "path": "../../../vendor/schemastery"
     },
     {
-      "path": "../../storage/storage"
-    },
-    {
-      "path": "../../storage/storage-domain"
-    },
-    {
-      "path": "../../core/session"
-    },
-    {
-      "path": "../../session/session-persistence"
-    },
-    {
-      "path": "../../util/brand"
+      "path": "../principal"
     },
     {
       "path": "../../runtime-diagnostics/invariants"
-    },
-    {
-      "path": "../workspace-source"
-    },
-    {
-      "path": "../../identity/principal"
-    },
-    {
-      "path": "../../identity/hosted-limits"
     }
   ]
 }

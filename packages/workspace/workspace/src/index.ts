@@ -12,17 +12,23 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-workspace-source'
+import type { GitWorkspaceSpec } from '@deepseek-ai/dsh-workspace-source'
 import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
+import { PrincipalUnauthenticatedError } from '@deepseek-ai/dsh-principal'
+import type {} from '@deepseek-ai/dsh-principal'
+import type {} from '@deepseek-ai/dsh-hosted-limits'
 import { WorkspaceEntity } from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
 
 export { WorkspaceMoveInvalidError } from './entity.ts'
+import { isolatedCheckoutParent, sameWorkspaceOwner } from './isolation.ts'
 import { realpathNormalize } from './paths.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
-import type { Workspace, WorkspaceId as WorkspaceIdBrand, WorkspaceSourceRecord } from './types.ts'
+import type { Workspace, WorkspaceId as WorkspaceIdBrand, WorkspaceOwner, WorkspaceSourceRecord } from './types.ts'
 
-export type { Workspace, WorkspaceSourceRecord, LocalWorkspaceSource, GitWorkspaceSource } from './types.ts'
+export type { Workspace, WorkspaceOwner, WorkspaceSourceRecord, LocalWorkspaceSource, GitWorkspaceSource } from './types.ts'
+export { isolatedCheckoutParent, principalCheckoutSegment, sameWorkspaceOwner } from './isolation.ts'
 export { workspaceDomainState, workspaceRecord, workspaceDomainSpec, workspaceSource } from './spec.ts'
 export type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
 export { realpathNormalize } from './paths.ts'
@@ -51,6 +57,48 @@ export class WorkspaceUnknownSessionError extends Error {
     super(`cannot archive session '${sessionId}': live sessions and session persistence hold no such session`)
     this.name = 'WorkspaceUnknownSessionError'
   }
+}
+
+/** `createGit` ran without `ctx.workspaceSource`. Local `create({ path })` never requires the seam. */
+export class WorkspaceSourceUnavailableError extends Error {
+  /**
+   * @param action - the registry operation that needed the seam.
+   */
+  constructor(readonly action: string) {
+    super(`cannot ${action}: ctx.workspaceSource is not mounted`)
+    this.name = 'WorkspaceSourceUnavailableError'
+  }
+}
+
+/** `createGit` ran without `checkoutParent` and without an authenticated principal. */
+export class WorkspaceCheckoutParentRequiredError extends Error {
+  constructor() {
+    super('cannot create a git workspace: checkoutParent is required when no principal is bound')
+    this.name = 'WorkspaceCheckoutParentRequiredError'
+  }
+}
+
+/** A path already belongs to another principal's workspace. */
+export class WorkspaceForbiddenError extends Error {
+  /**
+   * @param workspaceId - the existing record.
+   */
+  constructor(readonly workspaceId: WorkspaceId) {
+    super(`cannot adopt workspace '${workspaceId}': it belongs to another principal`)
+    this.name = 'WorkspaceForbiddenError'
+  }
+}
+
+/** Arguments of {@link WorkspaceRegistry.createGit}. Tokens are never accepted. */
+export interface WorkspaceCreateGitRequest {
+  readonly remoteUrl: string
+  /** Required when no principal authenticators are mounted. Ignored when they are. */
+  readonly checkoutParent?: string | undefined
+  readonly owner?: string | undefined
+  readonly repo?: string | undefined
+  readonly branch?: string | undefined
+  readonly credentialId?: string | undefined
+  readonly title?: string | undefined
 }
 
 /** A workspace reorder named a source or anchor absent from the durable registry order. */
@@ -173,36 +221,8 @@ export class WorkspaceRegistry extends Service {
    * @param request - remote URL and checkout parent; owner/repo/branch may be omitted when the URL is GitHub.
    * @returns the existing or newly durable workspace.
    */
-  async createGit(request: {
-    readonly remoteUrl: string
-    readonly checkoutParent: string
-    readonly owner?: string | undefined
-    readonly repo?: string | undefined
-    readonly branch?: string | undefined
-    readonly credentialId?: string | undefined
-    readonly title?: string | undefined
-  }): Promise<Workspace> {
-    const source = this.ctx.get('workspaceSource')
-    if (source === undefined) {
-      throw new Error('workspace.createGit requires ctx.workspaceSource with a git provider')
-    }
-    return await this.enqueueOperation(async () => {
-      const spec = source.resolve({
-        kind: 'git',
-        provider: 'github',
-        remoteUrl: request.remoteUrl,
-        checkoutParent: request.checkoutParent,
-        ...request.owner === undefined ? {} : { owner: request.owner },
-        ...request.repo === undefined ? {} : { repo: request.repo },
-        ...request.branch === undefined ? {} : { branch: request.branch },
-        ...request.credentialId === undefined ? {} : { credentialId: request.credentialId },
-      })
-      const { cwd } = await source.prepare(spec)
-      if (spec.kind !== 'git') {
-        throw new Error('workspace.createGit resolved a non-git spec')
-      }
-      return await this.createCanonical(cwd, request.title, spec)
-    })
+  async createGit(request: WorkspaceCreateGitRequest): Promise<Workspace> {
+    return await this.enqueueOperation(() => this.createGitLocked(request))
   }
 
   /**
@@ -212,6 +232,21 @@ export class WorkspaceRegistry extends Service {
    */
   get(id: WorkspaceId): Workspace | undefined {
     return this.entities.get(id)
+  }
+
+  /**
+   * Look up a workspace the current principal may see. Without authenticators
+   * this is {@link get}.
+   * @param id - workspace id.
+   * @returns the workspace, or `undefined` when unknown or not visible.
+   */
+  getVisible(id: WorkspaceId): Workspace | undefined {
+    const workspace = this.get(id)
+    if (workspace === undefined) return undefined
+    if (!this.authRequired()) return workspace
+    const current = this.ctx.get('principal')?.current()
+    if (current === undefined) return undefined
+    return sameWorkspaceOwner(workspace.owner, current) ? workspace : undefined
   }
 
   /**
@@ -228,6 +263,19 @@ export class WorkspaceRegistry extends Service {
       }
       return entity
     })
+  }
+
+  /**
+   * Workspaces the current principal may see. Without authenticators this is
+   * {@link list}.
+   * @returns visible workspaces in registry order.
+   */
+  listVisible(): Workspace[] {
+    const all = this.list()
+    if (!this.authRequired()) return all
+    const current = this.ctx.get('principal')?.current()
+    if (current === undefined) return []
+    return all.filter(workspace => sameWorkspaceOwner(workspace.owner, current))
   }
 
   /**
@@ -324,13 +372,46 @@ export class WorkspaceRegistry extends Service {
     return undefined
   }
 
+  private async createGitLocked(request: WorkspaceCreateGitRequest): Promise<WorkspaceEntity> {
+    this.ctx.get('hostedLimits')?.assertNotKilled()
+    const source = this.ctx.get('workspaceSource')
+    if (source === undefined) throw new WorkspaceSourceUnavailableError('create a git workspace')
+    const checkoutParent = this.resolveGitCheckoutParent(request)
+    const spec = source.resolve({
+      kind: 'git',
+      provider: 'github',
+      remoteUrl: request.remoteUrl,
+      checkoutParent,
+      ...request.branch === undefined ? {} : { branch: request.branch },
+      ...request.owner === undefined ? {} : { owner: request.owner },
+      ...request.repo === undefined ? {} : { repo: request.repo },
+      ...request.credentialId === undefined ? {} : { credentialId: request.credentialId },
+    })
+    if (spec.kind !== 'git') {
+      throw new Error(`workspace-source resolve(git) returned kind '${spec.kind}'`)
+    }
+    const { cwd } = await source.prepare(spec)
+    const gitSource: GitWorkspaceSpec = { ...spec, checkoutPath: cwd }
+    const title = request.title ?? `${gitSource.owner}/${gitSource.repo}`
+    return await this.createCanonical(cwd, title, gitSource)
+  }
+
   private async createCanonical(
     canonical: string,
     title: string | undefined,
     source: WorkspaceSourceRecord,
   ): Promise<WorkspaceEntity> {
+    const owner = this.authRequired() ? this.requireOwner('create a workspace') : undefined
     for (const entity of this.entities.values()) {
-      if (entity.path === canonical) return entity
+      if (entity.path !== canonical) continue
+      if (owner !== undefined && !sameWorkspaceOwner(entity.owner, owner)) {
+        throw new WorkspaceForbiddenError(entity.id)
+      }
+      return entity
+    }
+
+    if (owner !== undefined) {
+      this.ctx.get('hostedLimits')?.assertWorkspaceCreate(owner, this.ownedCount(owner))
     }
 
     const workspaceName = title ?? basename(canonical)
@@ -345,6 +426,7 @@ export class WorkspaceRegistry extends Service {
       sessionIds: [],
       createdAt: now,
       updatedAt: now,
+      ...owner === undefined ? {} : { owner },
     }
     const entity = new WorkspaceEntity(this.host, id, record)
     this.entities.set(id, entity)
@@ -691,6 +773,40 @@ export class WorkspaceRegistry extends Service {
   private async setState(state: WorkspaceDomainState): Promise<void> {
     await (this.global as DomainGlobal<WorkspaceDomainState>).set(state)
     this.state = state
+  }
+
+  private authRequired(): boolean {
+    return this.ctx.get('principal')?.hasAuthenticators() === true
+  }
+
+  private ownedCount(owner: WorkspaceOwner): number {
+    let count = 0
+    for (const workspace of this.entities.values()) {
+      if (sameWorkspaceOwner(workspace.owner, owner)) count += 1
+    }
+    return count
+  }
+
+  private requireOwner(action: string): WorkspaceOwner {
+    const principal = this.ctx.get('principal')
+    if (principal === undefined) throw new PrincipalUnauthenticatedError(action)
+    const current = principal.require(action)
+    return { tenantId: current.tenantId, userId: current.userId }
+  }
+
+  private resolveGitCheckoutParent(request: WorkspaceCreateGitRequest): string {
+    if (this.authRequired()) {
+      const owner = this.requireOwner('create a git workspace')
+      const limits = this.ctx.get('hostedLimits')
+      if (limits === undefined) {
+        throw new Error('hosted-limits must be mounted when principal authenticators are registered')
+      }
+      return isolatedCheckoutParent(limits.requireCheckoutRoot(), owner)
+    }
+    if (request.checkoutParent === undefined || request.checkoutParent === '') {
+      throw new WorkspaceCheckoutParentRequiredError()
+    }
+    return request.checkoutParent
   }
 
   private enqueueOperation<T>(operation: () => Promise<T>): Promise<T> {

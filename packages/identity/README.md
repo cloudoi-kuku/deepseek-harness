@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The identity group provides one anonymous id per harness home that the installation's telemetry, feedback, and DeepSeek requests attach to their records, so everything leaving one home can be recognized as coming from the same installation without identifying the user. There is nothing to configure: the id appears automatically the first time one of those features runs and stays stable until its file is deleted. The group has one package; this page maps it, and the package README owns the details.
+The identity group provides one anonymous id per harness home that the installation's telemetry, feedback, and DeepSeek requests attach to their records, so everything leaving one home can be recognized as coming from the same installation without identifying the user. Hosted compositions may also mount a request-scoped product principal and quota policy; default `dsh web` does not. The group has four packages; this page maps them, and each package README owns the details.
 
 ## Table of Contents
 
@@ -23,6 +23,9 @@ The identity group provides one anonymous id per harness home that the installat
 | Package | Role |
 |---|---|
 | [`anonymous-user-id`](anonymous-user-id/README.md) | Gives every harness home one anonymous id that telemetry, feedback, and DeepSeek requests attach to their records, so records from one installation can be recognized without identifying the user |
+| [`principal`](principal/README.md) | Request-scoped tenant/user (`ctx.principal`); authenticators register, Host RPC binds with `run` |
+| [`principal-hmac`](principal-hmac/README.md) | HMAC `harness_launch` authenticator; default `dsh web` does not mount it |
+| [`hosted-limits`](hosted-limits/README.md) | Kill switch, per-user caps, git rate limit, isolated checkout root |
 
 <a id="related-documentation"></a>
 ## Related documentation

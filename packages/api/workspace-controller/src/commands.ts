@@ -1,16 +1,22 @@
 /** Workspace command implementation and stable Remote failure mapping. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { GitWorkspaceSourceProvider } from '@deepseek-ai/dsh-workspace-source'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
+  WorkspaceCheckoutParentRequiredError,
+  WorkspaceForbiddenError,
   WorkspaceId,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
+  WorkspaceSourceUnavailableError,
   WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
+import { HostedLimitsError } from '@deepseek-ai/dsh-hosted-limits'
 import { TypertRemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
 import { workspaceView } from './feed.ts'
 import type {
+  GitWorkspaceStatusValue,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateGitRequest,
@@ -18,6 +24,10 @@ import type {
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
   WorkspaceDeleteValue,
+  WorkspaceGitCheckoutBranchRequest,
+  WorkspaceGitCommitRequest,
+  WorkspaceGitStatusRequest,
+  WorkspaceGitSyncRequest,
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
@@ -70,6 +80,17 @@ export class WorkspaceCommands {
         return { workspace: workspaceView(workspace), created: !known.has(workspace.id) }
       } catch (error) {
         if (error instanceof TypertRemoteFailure) throw error
+        const policy = policyFailure(error)
+        if (policy !== undefined) throw policy
+        if (error instanceof WorkspaceSourceUnavailableError) {
+          throw failure('workspace-source-unavailable', error.message, { kind: 'git' })
+        }
+        if (error instanceof WorkspaceCheckoutParentRequiredError) {
+          throw failure('workspace-invalid-path', error.message, { path: request.remoteUrl })
+        }
+        if (error instanceof WorkspaceForbiddenError) {
+          throw workspaceNotFound(error.workspaceId)
+        }
         throw failure(
           'workspace-invalid-path',
           `cannot create a Git Workspace from "${request.remoteUrl}": ${errorMessage(error)}`,
@@ -185,8 +206,109 @@ export class WorkspaceCommands {
     return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
   }
 
+  /**
+   * Git working-copy status for a git workspace.
+   * @param request - workspace identity.
+   * @returns branch and dirty/ahead/behind counts.
+   */
+  gitStatus(request: WorkspaceGitStatusRequest): Promise<{ status: GitWorkspaceStatusValue }> {
+    return this.gitOp(request.workspaceId, async (cwd, git) => ({
+      status: await git.status(cwd),
+    }))
+  }
+
+  /**
+   * Stage all changes and commit.
+   * @param request - workspace identity and commit message.
+   * @returns confirmation.
+   */
+  gitCommit(request: WorkspaceGitCommitRequest): Promise<{ committed: true }> {
+    const message = request.message.trim()
+    if (message === '') {
+      return Promise.reject(failure('bad-request', 'git commit requires a non-blank message', {}))
+    }
+    return this.gitOp(request.workspaceId, async (cwd, git) => {
+      await git.commit(cwd, message)
+      return { committed: true as const }
+    })
+  }
+
+  /**
+   * Push HEAD to origin.
+   * @param request - workspace identity.
+   * @returns confirmation.
+   */
+  gitPush(request: WorkspaceGitSyncRequest): Promise<{ pushed: true }> {
+    return this.gitOp(request.workspaceId, async (cwd, git) => {
+      await git.push(cwd)
+      return { pushed: true as const }
+    })
+  }
+
+  /**
+   * Fast-forward from origin.
+   * @param request - workspace identity.
+   * @returns confirmation.
+   */
+  gitPull(request: WorkspaceGitSyncRequest): Promise<{ pulled: true }> {
+    return this.gitOp(request.workspaceId, async (cwd, git) => {
+      await git.pull(cwd)
+      return { pulled: true as const }
+    })
+  }
+
+  /**
+   * Check out or create a branch.
+   * @param request - workspace identity and branch name.
+   * @returns the requested branch.
+   */
+  gitCheckoutBranch(request: WorkspaceGitCheckoutBranchRequest): Promise<{ branch: string }> {
+    const branch = request.branch.trim()
+    if (branch === '') {
+      return Promise.reject(failure('bad-request', 'git checkout requires a non-blank branch', {}))
+    }
+    return this.gitOp(request.workspaceId, async (cwd, git) => {
+      await git.checkoutBranch(cwd, branch)
+      return { branch }
+    })
+  }
+
+  private gitOp<T>(
+    workspaceId: WorkspaceId,
+    fn: (cwd: string, git: GitWorkspaceSourceProvider) => Promise<T>,
+  ): Promise<T> {
+    return this.enqueue(async () => {
+      const workspace = this.requireWorkspace(workspaceId)
+      if (workspace.source.kind !== 'git') {
+        throw failure(
+          'workspace-not-git',
+          `workspace "${workspaceId}" is not a git checkout`,
+          { workspaceId },
+        )
+      }
+      const source = this.ctx.get('workspaceSource')
+      if (source === undefined) {
+        throw failure(
+          'workspace-source-unavailable',
+          'cannot run a git workspace operation: ctx.workspaceSource is not mounted',
+          { kind: 'git' },
+        )
+      }
+      try {
+        const owner = workspace.owner
+        if (owner !== undefined) this.ctx.get('hostedLimits')?.assertGitOp(owner)
+        else this.ctx.get('hostedLimits')?.assertNotKilled()
+        return await fn(workspace.path, source.git())
+      } catch (error) {
+        const policy = policyFailure(error)
+        if (policy !== undefined) throw policy
+        throw error
+      }
+    })
+  }
+
   private requireWorkspace(workspaceId: WorkspaceId): Workspace {
-    const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(workspaceId))
+    const workspace = this.ctx.workspaceRegistry.getVisible(WorkspaceId(workspaceId))
     if (workspace === undefined) throw workspaceNotFound(workspaceId)
     return workspace
   }
@@ -212,6 +334,11 @@ function failure(
   details: object,
 ): TypertRemoteFailure {
   return new TypertRemoteFailure({ code, message, details })
+}
+
+function policyFailure(error: unknown): TypertRemoteFailure | undefined {
+  if (!(error instanceof HostedLimitsError)) return undefined
+  return failure(error.code, error.message, error.details)
 }
 
 function errorMessage(error: unknown): string {

@@ -51,6 +51,7 @@ export const workspaceRecord = z.object({
   sessionIds: z.array(z.string().transform(SessionId)),
   createdAt: z.string(),
   updatedAt: z.string(),
+  owner: z.object({ tenantId: z.string(), userId: z.string() }).optional(),
 })
 
 /** One stored workspace record, inferred from {@link workspaceRecord}. */

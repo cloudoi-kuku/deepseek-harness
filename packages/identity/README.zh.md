@@ -9,7 +9,7 @@ kind: "package-group"
 
 ## 概述
 
-identity 组为每个 harness home 提供一个匿名 id，该安装的遥测、反馈与 DeepSeek 请求会把它附加到各自的记录上，因此离开同一个 home 的所有内容都能被识别为来自同一套安装，而无需识别用户身份。无需配置任何东西：id 会在这些功能之一首次运行时自动出现，并在文件被删除前保持稳定。本组只有一个包；本页是组的映射，包 README 负责细节。
+identity 组为每个 harness home 提供一个匿名 id，该安装的遥测、反馈与 DeepSeek 请求会把它附加到各自的记录上，因此离开同一个 home 的所有内容都能被识别为来自同一套安装，而无需识别用户身份。托管组合还可以挂载请求范围的产品 principal 与配额策略；默认 `dsh web` 不挂载。本组有四个包；本页是组的映射，各包 README 负责细节。
 
 ## 目录
 
@@ -23,6 +23,9 @@ identity 组为每个 harness home 提供一个匿名 id，该安装的遥测、
 | 包 | 职责 |
 |---|---|
 | [`anonymous-user-id`](anonymous-user-id/README.zh.md) | 让每个 harness home 拥有一个匿名 id，遥测、反馈与 DeepSeek 请求把它附加到记录上，使来自同一安装的记录无需识别用户即可被辨认 |
+| [`principal`](principal/README.zh.md) | 请求范围的租户/用户（`ctx.principal`）；认证器注册，Host RPC 用 `run` 绑定 |
+| [`principal-hmac`](principal-hmac/README.zh.md) | HMAC `harness_launch` 认证器；默认 `dsh web` 不挂载 |
+| [`hosted-limits`](hosted-limits/README.zh.md) | 总开关、按用户上限、git 速率限制、隔离 checkout 根目录 |
 
 <a id="related-documentation"></a>
 ## 相关文档

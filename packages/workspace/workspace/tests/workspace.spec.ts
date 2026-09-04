@@ -11,7 +11,10 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import type { WorkspaceSourceRequest, WorkspaceSpec } from '@deepseek-ai/dsh-workspace-source'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import PrincipalService from '@deepseek-ai/dsh-principal'
+import HostedLimits from '@deepseek-ai/dsh-hosted-limits'
 import WorkspaceRegistry, {
+  WorkspaceForbiddenError,
   WorkspaceId,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
@@ -1008,5 +1011,69 @@ describe('registry-global session archive', () => {
     )
     const upgraded = await harness({ pool: legacy })
     expect(upgraded.registry.archivedSessionIds).toEqual([])
+  })
+})
+
+describe('WorkspaceRegistry principal isolation', () => {
+  it('stamps owner, filters list/get, and isolates git checkout under checkoutRoot', async () => {
+    const checkoutRoot = await makeDir('checkouts')
+    const checkout = await makeDir('acme-demo')
+    const spec: WorkspaceSpec = {
+      kind: 'git',
+      provider: 'github',
+      owner: 'acme',
+      repo: 'demo',
+      branch: 'main',
+      remoteUrl: 'https://github.com/acme/demo.git',
+      checkoutPath: checkout,
+    }
+    const { ctx, registry } = await harness()
+    await ctx.plugin(PrincipalService)
+    await ctx.plugin(HostedLimits, { checkoutRoot, maxWorkspacesPerUser: 2 })
+    ctx.principal.register({
+      id: 'test',
+      identify: () => ({ tenantId: 't1', userId: 'alice' }),
+    })
+    ctx.provide('workspaceSource', {
+      resolve: (request: WorkspaceSourceRequest) => {
+        if (request.kind !== 'git') throw new Error('expected git')
+        expect(request.checkoutParent).toBe(`${checkoutRoot}/t1/alice`)
+        return spec
+      },
+      prepare: async () => ({ cwd: checkout }),
+    } as never)
+
+    const alice = { tenantId: 't1', userId: 'alice' }
+    const bob = { tenantId: 't1', userId: 'bob' }
+    const workspace = await ctx.principal.run(alice, () => registry.createGit({
+      remoteUrl: spec.remoteUrl,
+      checkoutParent: '/ignored-client-path',
+      title: 'Alice demo',
+    }))
+    expect(workspace.owner).toEqual(alice)
+    expect(ctx.principal.run(alice, () => registry.listVisible())).toEqual([workspace])
+    expect(ctx.principal.run(bob, () => registry.listVisible())).toEqual([])
+    expect(ctx.principal.run(bob, () => registry.getVisible(workspace.id))).toBeUndefined()
+    expect(ctx.principal.run(alice, () => registry.getVisible(workspace.id))).toBe(workspace)
+
+    const otherDir = await makeDir('bob-local')
+    await expect(ctx.principal.run(bob, () => registry.create(otherDir))).resolves.toMatchObject({
+      owner: bob,
+    })
+    await expect(ctx.principal.run(bob, () => registry.create(workspace.path)))
+      .rejects.toBeInstanceOf(WorkspaceForbiddenError)
+  })
+
+  it('enforces workspace quota for a new owner record', async () => {
+    const { ctx, registry } = await harness()
+    await ctx.plugin(PrincipalService)
+    await ctx.plugin(HostedLimits, { maxWorkspacesPerUser: 1 })
+    ctx.principal.register({ id: 'test', identify: () => undefined })
+    const alice = { tenantId: 't1', userId: 'alice' }
+    const first = await makeDir('one')
+    const second = await makeDir('two')
+    await ctx.principal.run(alice, () => registry.create(first))
+    await expect(ctx.principal.run(alice, () => registry.create(second)))
+      .rejects.toMatchObject({ code: 'quota-exceeded' })
   })
 })

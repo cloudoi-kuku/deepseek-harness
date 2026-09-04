@@ -2,10 +2,12 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { AuthController } from './auth.ts'
 import { WorkspaceCommands } from './commands.ts'
 import { DirectoryPickerController } from './directory-picker.ts'
 import { WorkspaceFeed } from './feed.ts'
 import type {
+  GitWorkspaceStatusValue,
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceCreateGitRequest,
@@ -14,6 +16,10 @@ import type {
   WorkspaceDeleteRequest,
   WorkspaceDeleteValue,
   WorkspaceFollowFrame,
+  WorkspaceGitCheckoutBranchRequest,
+  WorkspaceGitCommitRequest,
+  WorkspaceGitStatusRequest,
+  WorkspaceGitSyncRequest,
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
   WorkspaceOrderValue,
@@ -48,6 +54,7 @@ export class WorkspaceController extends TypertRemoteService {
     // stays pending until a picking backend is composed, so a host without one
     // registers no picking namespace instead of answering an unservable verb.
     ctx.plugin(DirectoryPickerController)
+    ctx.plugin(AuthController)
   }
 
   /**
@@ -118,6 +125,56 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('archiveSession')
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue> {
     return this.commands.archiveSession(request)
+  }
+
+  /**
+   * Git working-copy status. A local workspace fails with `workspace-not-git`.
+   * @param request - workspace identity.
+   * @returns branch and dirty/ahead/behind counts.
+   */
+  @Remote('gitStatus')
+  gitStatus(request: WorkspaceGitStatusRequest): Promise<{ status: GitWorkspaceStatusValue }> {
+    return this.commands.gitStatus(request)
+  }
+
+  /**
+   * Stage every change and commit.
+   * @param request - workspace identity and commit message.
+   * @returns confirmation.
+   */
+  @Remote('gitCommit')
+  gitCommit(request: WorkspaceGitCommitRequest): Promise<{ committed: true }> {
+    return this.commands.gitCommit(request)
+  }
+
+  /**
+   * Push the current branch to origin.
+   * @param request - workspace identity.
+   * @returns confirmation.
+   */
+  @Remote('gitPush')
+  gitPush(request: WorkspaceGitSyncRequest): Promise<{ pushed: true }> {
+    return this.commands.gitPush(request)
+  }
+
+  /**
+   * Fast-forward from origin.
+   * @param request - workspace identity.
+   * @returns confirmation.
+   */
+  @Remote('gitPull')
+  gitPull(request: WorkspaceGitSyncRequest): Promise<{ pulled: true }> {
+    return this.commands.gitPull(request)
+  }
+
+  /**
+   * Check out an existing branch, or create it when absent.
+   * @param request - workspace identity and branch name.
+   * @returns the requested branch.
+   */
+  @Remote('gitCheckoutBranch')
+  gitCheckoutBranch(request: WorkspaceGitCheckoutBranchRequest): Promise<{ branch: string }> {
+    return this.commands.gitCheckoutBranch(request)
   }
 
   /**

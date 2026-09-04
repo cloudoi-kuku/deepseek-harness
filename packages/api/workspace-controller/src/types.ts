@@ -30,6 +30,8 @@ export interface WorkspaceView {
     readonly remoteUrl?: string
     readonly checkoutPath?: string
   }
+  /** Tenant+user owner when created under an authenticated principal. */
+  readonly owner?: { readonly tenantId: string; readonly userId: string }
   /** User-visible title. */
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
@@ -46,6 +48,11 @@ export interface WorkspaceErrorDetailsMap {
   'workspace-invalid-path': { readonly path: string }
   'workspace-not-found': { readonly workspaceId: WorkspaceId }
   'workspace-name-conflict': { readonly name: string }
+  'workspace-not-git': { readonly workspaceId: WorkspaceId }
+  'workspace-source-unavailable': { readonly kind: string }
+  'kill-switch': Record<never, never>
+  'quota-exceeded': { readonly kind?: string; readonly limit?: number }
+  'rate-limited': { readonly kind?: string; readonly limit?: number }
   'workspace-move-invalid': {
     readonly workspaceId: WorkspaceId
     readonly sessionId: SessionId
@@ -81,6 +88,16 @@ export interface DirectoryPickerErrorDetailsMap {
   internal: Record<never, never>
 }
 
+/** `auth.me` value. Never includes a token. */
+export type AuthMeValue =
+  | { readonly authenticated: false }
+  | {
+    readonly authenticated: true
+    readonly tenantId: string
+    readonly userId: string
+    readonly product?: string | undefined
+  }
+
 /** Existing directory requested for Workspace adoption. */
 export interface WorkspaceCreateRequest {
   readonly path: string
@@ -89,12 +106,42 @@ export interface WorkspaceCreateRequest {
 /** Git remote requested for Workspace adoption. Tokens are never in this payload. */
 export interface WorkspaceCreateGitRequest {
   readonly remoteUrl: string
-  readonly checkoutParent: string
-  readonly owner?: string
-  readonly repo?: string
-  readonly branch?: string
+  readonly checkoutParent?: string | undefined
+  readonly owner?: string | undefined
+  readonly repo?: string | undefined
+  readonly branch?: string | undefined
   readonly credentialId?: string | undefined
   readonly title?: string | undefined
+}
+
+/** Git working-copy status. Tokens are never included. */
+export interface GitWorkspaceStatusValue {
+  readonly branch: string
+  readonly dirty: boolean
+  readonly ahead: number
+  readonly behind: number
+}
+
+/** Git status request. */
+export interface WorkspaceGitStatusRequest {
+  readonly workspaceId: WorkspaceId
+}
+
+/** Git commit request. */
+export interface WorkspaceGitCommitRequest {
+  readonly workspaceId: WorkspaceId
+  readonly message: string
+}
+
+/** Git push/pull request. */
+export interface WorkspaceGitSyncRequest {
+  readonly workspaceId: WorkspaceId
+}
+
+/** Git branch checkout request. */
+export interface WorkspaceGitCheckoutBranchRequest {
+  readonly workspaceId: WorkspaceId
+  readonly branch: string
 }
 
 /** Created or previously registered Workspace. */

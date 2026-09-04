@@ -24,6 +24,7 @@ export function workspaceView(workspace: Workspace): WorkspaceView {
     workspaceId: workspace.id,
     path: workspace.path,
     source: workspace.source,
+    ...workspace.owner === undefined ? {} : { owner: workspace.owner },
     title: workspace.title,
     sessionIds: [...workspace.sessionIds],
     createdAt: workspace.createdAt,
@@ -37,6 +38,7 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
     workspaceId: WorkspaceId(workspaceId),
     path: record.path,
     source: record.source,
+    ...record.owner === undefined ? {} : { owner: record.owner },
     title: record.title,
     sessionIds: [...record.sessionIds],
     createdAt: record.createdAt,
@@ -70,7 +72,7 @@ export class WorkspaceFeed {
    */
   baseline(): WorkspaceBaseline {
     return {
-      items: this.ctx.workspaceRegistry.list().map(workspaceView),
+      items: this.ctx.workspaceRegistry.listVisible().map(workspaceView),
       archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds],
     }
   }

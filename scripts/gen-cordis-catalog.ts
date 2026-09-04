@@ -125,6 +125,9 @@ export const SERVICE_PAGE: Record<string, string> = {
   workspaceSource: 'workspace.md',
   workspaceController: 'workspace.md',
   directoryPickerController: 'workspace.md',
+  principal: 'workspace.md',
+  hostedLimits: 'workspace.md',
+  authController: 'workspace.md',
 }
 
 /**
@@ -665,6 +668,10 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   AgentPreset: 'discovered preset record is owned by packages/preset/agent-presets/README.md',
   AgentPresetRoster: 'path-free preset roster is owned by packages/preset/agent-presets/README.md',
   AgentPresetDocument: 'preset composition view is owned by packages/preset/agent-presets/README.md',
+  Principal: 'request-scoped caller is owned by packages/identity/principal/README.md',
+  PrincipalAuthenticator: 'authenticator contract is owned by packages/identity/principal/README.md',
+  PrincipalLogout: 'logout cookie payload is owned by packages/identity/principal/README.md',
+  LimitOwner: 'quota key is owned by packages/identity/hosted-limits/README.md',
   PresetMetadata: 'preset display text is owned by packages/preset/agent-presets/README.md',
   BashEnvContributor: 'service-local extension type is owned by packages/shell/tool-bash/src/index.ts',
   BashEnvVariableInfo: 'service-local metadata type is owned by packages/shell/tool-bash/src/index.ts',

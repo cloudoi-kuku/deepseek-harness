@@ -202,6 +202,24 @@ export class FakeApiClient {
   onWorkspaceArchiveSession: (payload: unknown) => Promise<RemoteResult<{ archivedSessionIds: SessionId[] }>> =
     payload => Promise.resolve(remoteOk({ archivedSessionIds: [(payload as { sessionId: SessionId }).sessionId] }))
 
+  onWorkspaceGitStatus: (payload: unknown) => Promise<RemoteResult<{
+    status: { branch: string; dirty: boolean; ahead: number; behind: number }
+  }>> = () => Promise.resolve(remoteOk({
+    status: { branch: 'main', dirty: false, ahead: 0, behind: 0 },
+  }))
+
+  onWorkspaceGitCommit: (payload: unknown) => Promise<RemoteResult<{ committed: true }>> =
+    () => Promise.resolve(remoteOk({ committed: true as const }))
+
+  onWorkspaceGitPush: (payload: unknown) => Promise<RemoteResult<{ pushed: true }>> =
+    () => Promise.resolve(remoteOk({ pushed: true as const }))
+
+  onWorkspaceGitPull: (payload: unknown) => Promise<RemoteResult<{ pulled: true }>> =
+    () => Promise.resolve(remoteOk({ pulled: true as const }))
+
+  onWorkspaceGitCheckoutBranch: (payload: unknown) => Promise<RemoteResult<{ branch: string }>> =
+    payload => Promise.resolve(remoteOk({ branch: (payload as { branch: string }).branch }))
+
   /** Remote namespaces bound to this fake's programmable unary slots and stream pumps. */
   sessionRemotes(): RuntimeRemotes {
     return {
@@ -280,6 +298,31 @@ export class FakeApiClient {
           'workspace.archiveSession',
           payload,
           this.onWorkspaceArchiveSession(payload),
+        ),
+        gitStatus: payload => this.record(
+          'workspace.gitStatus',
+          payload,
+          this.onWorkspaceGitStatus(payload),
+        ),
+        gitCommit: payload => this.record(
+          'workspace.gitCommit',
+          payload,
+          this.onWorkspaceGitCommit(payload),
+        ),
+        gitPush: payload => this.record(
+          'workspace.gitPush',
+          payload,
+          this.onWorkspaceGitPush(payload),
+        ),
+        gitPull: payload => this.record(
+          'workspace.gitPull',
+          payload,
+          this.onWorkspaceGitPull(payload),
+        ),
+        gitCheckoutBranch: payload => this.record(
+          'workspace.gitCheckoutBranch',
+          payload,
+          this.onWorkspaceGitCheckoutBranch(payload),
         ),
         follow: signal => this.openWorkspace(signal),
       },
