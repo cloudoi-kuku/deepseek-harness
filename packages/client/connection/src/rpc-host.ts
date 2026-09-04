@@ -2,6 +2,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-principal'
 import {
   RpcId,
   type ClientRequest,
@@ -117,7 +118,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
     channel: '/api',
   ): ConnectionFetchHandler {
     return {
-      fetch: (request) => {
+      fetch: request => withPrincipal(this.ctx, request, () => {
         const pathname = new URL(request.url).pathname
         const route = this.fetchRoutes.get(pathname)
         if (route?.methods.has(request.method) === true) return route.fetch(request)
@@ -127,7 +128,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
           return Promise.resolve(new Response('not found', { status: 404 }))
         }
         return interceptor.fetchHandler.fetch(request)
-      },
+      }),
     }
   }
 
@@ -155,7 +156,10 @@ export class HostConnectionService extends Service implements HostConnectionHand
     handler: ConnectionRpcHandler,
   ): () => Promise<void> {
     assertChannel(channel)
-    const fetchHandler = rpcFetchHandler(channel, handler)
+    const dispatch = rpcFetchHandler(channel, handler)
+    const fetchHandler: FetchHandler = {
+      fetch: request => withPrincipal(this.ctx, request, () => dispatch.fetch(request)),
+    }
     const route: WebRoute = {
       kind: 'prefix',
       path: channel,
@@ -198,6 +202,30 @@ export class HostConnectionService extends Service implements HostConnectionHand
       }
     }, `client-connection: ${channel} rpc interceptor`)
   }
+}
+
+/**
+ * Bind `ctx.principal` for one Fetch when the service is mounted. Unmounted
+ * compositions (default `dsh web`) skip this. `auth.logout` copies authenticator
+ * `Set-Cookie` onto the RPC response; Typert Remotes never see the Request.
+ */
+async function withPrincipal(
+  ctx: Context,
+  request: Request,
+  dispatch: () => Promise<Response>,
+): Promise<Response> {
+  const principal = ctx.get('principal')
+  if (principal === undefined) return dispatch()
+  const identified = await principal.bindFromRequest(request)
+  return await principal.run(identified, async () => {
+    const response = await dispatch()
+    if (!new URL(request.url).pathname.endsWith('/auth.logout')) return response
+    const logout = await principal.logout(request)
+    if (logout.setCookie === undefined || logout.setCookie.length === 0) return response
+    const headers = new Headers(response.headers)
+    for (const cookie of logout.setCookie) headers.append('set-cookie', cookie)
+    return new Response(response.body, { status: response.status, headers })
+  })
 }
 
 function rpcFetchHandler(

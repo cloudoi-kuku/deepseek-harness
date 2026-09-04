@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import PrincipalService from '@deepseek-ai/dsh-principal'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
@@ -13,6 +14,7 @@ import GitWorkspaceSource from '@deepseek-ai/dsh-workspace-source-git'
 import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import WorkspaceController from '../src/index.ts'
+import { AuthController } from '../src/auth.ts'
 import { WorkspaceFeed } from '../src/feed.ts'
 import type { WorkspaceFollowFrame } from '../src/types.ts'
 import { MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
@@ -368,5 +370,37 @@ describe('WorkspaceController follow', () => {
     await ctx.fiber.dispose()
     roots.splice(roots.indexOf(ctx), 1)
     await expect(closing).resolves.toEqual({ done: true, value: undefined })
+  })
+})
+
+describe('AuthController', () => {
+  it('projects anonymous and bound me, and logout is a confirmation', async () => {
+    const ctx = new Context()
+    roots.push(ctx)
+    ctx.provide('typert', {
+      lookups: { configure: () => () => {} },
+      contexts: { configureHost: () => () => {} },
+    } as never)
+    const auth = new AuthController(ctx)
+    expect(auth.me()).toEqual({ authenticated: false })
+    expect(auth.logout()).toEqual({ loggedOut: true })
+    await ctx.plugin(PrincipalService)
+    expect(ctx.principal.run(
+      { tenantId: 't', userId: 'u', product: 'harness' },
+      () => auth.me(),
+    )).toEqual({
+      authenticated: true,
+      tenantId: 't',
+      userId: 'u',
+      product: 'harness',
+    })
+    expect(ctx.principal.run(
+      { tenantId: 't', userId: 'u' },
+      () => auth.me(),
+    )).toEqual({
+      authenticated: true,
+      tenantId: 't',
+      userId: 'u',
+    })
   })
 })

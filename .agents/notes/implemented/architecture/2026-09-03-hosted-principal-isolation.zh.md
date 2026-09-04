@@ -10,9 +10,9 @@ Status: implemented
 
 ## Decision
 
-`ctx.principal`（`dsh-principal`）是可选 Service Definition：认证器按 id 注册，`bindFromRequest` 识别调用方，`run` 用 `AsyncLocalStorage` 为一次 Host 请求绑定该调用方。默认 `dsh web` 不挂载它。`dsh-principal-hmac` 在 dsh 内再校验 CoreNet 启动令牌（cookie `harness_launch` 或 `Authorization: Bearer`）；叠加层代理在 `packages/experimental/hosted-generate/example/azure/launch-token.mjs` 中保留自己的 HMAC，不被改写。`auth.me` / `auth.logout` 是 Workspace-controller 的 Host Remote（`auth` 命名空间）。登出发出 `Set-Cookie` Max-Age=0；过期看 `exp`；本切片没有吊销列表。
+`ctx.principal`（`dsh-principal`）是可选 Service Definition：认证器按 id 注册，`bindFromRequest` 识别调用方，`run` 用 `AsyncLocalStorage` 为一次 Host 请求绑定该调用方。默认 `dsh web` 不挂载它。Host HTTP 载体（`dsh-client-connection`）在每次 RPC Fetch 外包 `bindFromRequest` 和 `run`，并在 `auth.logout` 上复制认证器的 `Set-Cookie`；Typert Remote 看不到 Request。`dsh-principal-hmac` 在 dsh 内再校验 CoreNet 启动令牌（cookie `harness_launch` 或 `Authorization: Bearer`）；叠加层代理在 `packages/experimental/hosted-generate/example/azure/launch-token.mjs` 中保留自己的 HMAC，不被改写。`auth.me` / `auth.logout` 是 Workspace-controller 的 Host Remote（`auth` 命名空间）。登出发出 `Set-Cookie` Max-Age=0；过期看 `exp`；本切片没有吊销列表。
 
-注册了认证器时，workspace 记录盖上可选的 `owner: { tenantId, userId }`。Host RPC 使用 `listVisible` / `getVisible`：其他租户的 id 看起来像 not-found。OSS（无认证器）仍列出全部记录，`create({ path })` 不变。
+注册了认证器时，workspace 记录盖上可选的 `owner: { tenantId, userId }`（领域版本保持 3，现有 Envon 单元继续加载）。Host RPC 使用 `listVisible` / `getVisible`：其他租户的 id 看起来像 not-found。OSS（无认证器）仍列出全部记录，`create({ path })` 不变。
 
 已认证的 `createGit` 忽略客户端 `checkoutParent`，检出到 `hostedLimits.checkoutRoot/<tenantId>/<userId>/<owner>-<repo>`。没有认证器时，`checkoutParent` 仍必填。本切片没有容器隔离。
 

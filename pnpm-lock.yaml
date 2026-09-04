@@ -1703,6 +1703,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-principal':
+        specifier: workspace:^
+        version: link:../../identity/principal
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session

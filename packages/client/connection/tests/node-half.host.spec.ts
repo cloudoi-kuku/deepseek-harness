@@ -8,6 +8,7 @@ import type { AddressInfo } from 'node:net'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { WebServer, WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
+import PrincipalService from '@deepseek-ai/dsh-principal'
 import { API_PATH, RpcId, apply, inject, type ClientRequest, type HostConnectionHandle } from '../src/index.ts'
 import { DEFAULT_MAX_REQUEST_BODY_BYTES } from '../src/http-bridge.ts'
 import { provideBrowserCredentials } from './browser-credentials.ts'
@@ -444,6 +445,65 @@ describe('connection node half', () => {
       .toThrow('invalid or reserved RPC channel')
     await remove()
     await fiber.dispose()
+  })
+
+  it('binds ctx.principal for RPC Fetch and copies logout Set-Cookie', async () => {
+    const ctx = new Context()
+    const routes: WebRoute[] = []
+    provideBrowserCredentials(ctx)
+    ctx.provide('webServer', fakeHttpServer(routes, []) as WebServer)
+    await ctx.plugin(PrincipalService)
+    await ctx.plugin({ inject: [...inject], apply })
+    ctx.principal.register({
+      id: 'test',
+      identify(request) {
+        const userId = request.headers.get('x-test-user')
+        if (userId === null || userId === '') return undefined
+        return { tenantId: 'tenant-1', userId }
+      },
+      logout(request) {
+        if (request.headers.get('x-test-clear') === 'skip') return {}
+        return { setCookie: ['harness_launch=; Max-Age=0; Path=/'] }
+      },
+    })
+    const connection = ctx.get('connection') as HostConnectionHandle
+    const seen: Array<string | undefined> = []
+    connection.rpc.intercept(
+      '/api',
+      endpoint => endpoint === 'workspace.list' || endpoint === 'auth.logout',
+      async () => {
+        seen.push(ctx.principal.current()?.userId)
+        return { ok: true, value: { loggedOut: true } }
+      },
+    )
+    const shared = connection.createSharedFetchHandler('/api')
+    const post = (method: string, headers: HeadersInit): Promise<Response> => shared.fetch(new Request(
+      `http://127.0.0.1/api/${method}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body: JSON.stringify({
+          type: 'client-request',
+          rpcId: RpcId(`rpc-${method}`),
+          method,
+          payload: {},
+        } satisfies ClientRequest),
+      },
+    ))
+
+    const anonymous = await post('workspace.list', {})
+    expect((await anonymous.json()).result).toEqual({ ok: true, value: { loggedOut: true } })
+
+    const identified = await post('workspace.list', { 'x-test-user': 'ada' })
+    expect(identified.status).toBe(200)
+
+    const logout = await post('auth.logout', { 'x-test-user': 'ada' })
+    expect(logout.headers.getSetCookie()).toEqual(['harness_launch=; Max-Age=0; Path=/'])
+
+    const skipClear = await post('auth.logout', { 'x-test-user': 'ada', 'x-test-clear': 'skip' })
+    expect(skipClear.status).toBe(200)
+    expect(skipClear.headers.getSetCookie()).toEqual([])
+    expect(seen).toEqual([undefined, 'ada', 'ada', 'ada'])
   })
 })
 

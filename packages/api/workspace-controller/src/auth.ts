@@ -37,12 +37,12 @@ export class AuthController extends TypertRemoteService {
   }
 
   /**
-   * Clear authenticator cookies. Success even when no cookie was present.
+   * Confirm logout. The HTTP carrier clears authenticator cookies on this
+   * endpoint; this Remote does not see the Request.
    * @returns logout confirmation.
    */
   @Remote('logout')
-  async logout(): Promise<{ loggedOut: true }> {
-    await this.ctx.get('principal')?.logout(new Request('http://127.0.0.1/'))
+  logout(): { loggedOut: true } {
     return { loggedOut: true }
   }
 }
