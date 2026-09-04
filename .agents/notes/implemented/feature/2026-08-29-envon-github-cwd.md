@@ -34,4 +34,4 @@ A GitHub-connected CoreNet user opening `https://harness.cloudoi.io/?launch=…`
 
 ## Related
 
-[Hosted generate POC](2026-08-28-hosted-generate-poc.md) still owns generate occupancy, cost caps, and the generate/deploy split. CoreNet path: `docs/envon-harness-corenet-path.md` in the CoreNet repo.
+[Hosted generate POC](2026-08-28-hosted-generate-poc.md) still owns generate occupancy, cost caps, and the generate/deploy split. [Standalone Git IDE beside CoreNet](2026-09-03-envon-standalone-and-corenet-entry.md) owns the unauthenticated landing, GENERATE_TOKEN `dsh web`, and `/clone`. CoreNet path: `docs/envon-harness-corenet-path.md` in the CoreNet repo.

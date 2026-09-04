@@ -16,6 +16,18 @@ export declare function parseWorkspaceGrant(body: unknown): WorkspaceGrant | nul
 
 export declare function githubHttpsOrigin(owner: string, name: string): string
 
+/** Parses a GitHub https clone URL. Null when the URL is not `https://github.com/<owner>/<repo>`. */
+export declare function parseGithubHttpsRemote(remoteUrl: string): { owner: string; repo: string } | null
+
+export declare function adoptGitWorkspace(opts: {
+  remoteUrl: string
+  checkoutParent?: string
+  title?: string
+  origin?: string
+  fetchImpl?: typeof fetch
+  rpc?: typeof dshRpc
+}): Promise<{ workspaceId: string; path: string; title: string }>
+
 export declare function fetchWorkspaceGrant(
   launchToken: string,
   opts?: { fetchImpl?: typeof fetch; origin?: string },

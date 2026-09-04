@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-29-envon-github-cwd.md
-2026-08-29-envon-github-cwd.md: 16008aa6f496393219c869a64e0c6893e56c50fe
-2026-08-29-envon-github-cwd.zh.md: 5e496a18cc217fb0e7cd8a9fcd62b67a2a5097c6
+2026-08-29-envon-github-cwd.md: 898ccef3b0d4e9448d55e62245adaf7fc0081818
+2026-08-29-envon-github-cwd.zh.md: 505d16d6fbaff4998b21787a2c704767661a49e5

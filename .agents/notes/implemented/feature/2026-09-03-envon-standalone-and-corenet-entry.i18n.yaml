@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-03-envon-standalone-and-corenet-entry.md
+2026-09-03-envon-standalone-and-corenet-entry.md: 0a80454c94a109c2889d36b3ee934edb62947635
+2026-09-03-envon-standalone-and-corenet-entry.zh.md: c3238cb2377a8e477e9ec26847c13c60dc717304

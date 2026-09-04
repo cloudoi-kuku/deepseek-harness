@@ -50,6 +50,53 @@ export function githubHttpsOrigin(owner, name) {
 }
 
 /**
+ * Parse `owner/repo` from a GitHub https clone URL. Tokens must not appear in the URL.
+ * @param {string} remoteUrl
+ * @returns {{ owner: string, repo: string } | null}
+ */
+export function parseGithubHttpsRemote(remoteUrl) {
+  const match = /^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/i.exec(remoteUrl.trim())
+  if (match?.[1] === undefined || match[2] === undefined) return null
+  if (match[1] === '' || match[2] === '') return null
+  return { owner: match[1], repo: match[2] }
+}
+
+/**
+ * Register a GitHub https remote through dsh `workspace/createGit`.
+ * Requires `checkoutParent` because the live composition does not mount principal-hmac.
+ * @param {{ remoteUrl: string, checkoutParent?: string, title?: string, origin?: string, fetchImpl?: typeof fetch, rpc?: typeof dshRpc }} opts
+ * @returns {Promise<{ workspaceId: string, path: string, title: string }>}
+ */
+export async function adoptGitWorkspace(opts) {
+  const remoteUrl = opts.remoteUrl
+  if (parseGithubHttpsRemote(remoteUrl) === null) {
+    throw new Error('remoteUrl must be an https://github.com/<owner>/<repo> URL')
+  }
+  const checkoutParent = opts.checkoutParent ?? WORKSPACE_DIR
+  const rpc = opts.rpc ?? dshRpc
+  const request = {
+    remoteUrl,
+    checkoutParent,
+    ...opts.title === undefined || opts.title === '' ? {} : { title: opts.title },
+  }
+  const value = await rpc('workspace/createGit', { request }, {
+    origin: opts.origin,
+    fetchImpl: opts.fetchImpl,
+  })
+  const workspace = value !== null && typeof value === 'object'
+    ? /** @type {{ workspace?: { workspaceId?: string, path?: string, title?: string } }} */ (value).workspace
+    : undefined
+  if (workspace === undefined || typeof workspace.workspaceId !== 'string') {
+    throw new Error('dsh workspace/createGit returned no workspace')
+  }
+  return {
+    workspaceId: workspace.workspaceId,
+    path: workspace.path ?? checkoutParent,
+    title: workspace.title ?? opts.title ?? '',
+  }
+}
+
+/**
  * @param {string} launchToken
  * @param {{ fetchImpl?: typeof fetch, origin?: string }} [opts]
  */

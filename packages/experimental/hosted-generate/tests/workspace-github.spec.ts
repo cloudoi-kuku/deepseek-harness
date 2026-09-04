@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   adoptDshWorkspace,
+  adoptGitWorkspace,
   dshRpc,
   fetchWorkspaceGrant,
   githubHttpsOrigin,
+  parseGithubHttpsRemote,
   parseWorkspaceGrant,
   redact,
 } from '../example/azure/workspace-github.mjs'
@@ -60,6 +62,51 @@ describe('githubHttpsOrigin', () => {
     expect(githubHttpsOrigin('ada', 'cloudoi-harness')).toBe(
       'https://github.com/ada/cloudoi-harness.git',
     )
+  })
+})
+
+describe('parseGithubHttpsRemote', () => {
+  it('accepts https GitHub URLs and rejects credentials in the URL', () => {
+    expect(parseGithubHttpsRemote('https://github.com/ada/demo.git')).toEqual({
+      owner: 'ada',
+      repo: 'demo',
+    })
+    expect(parseGithubHttpsRemote('https://x-access-token:gho_secret@github.com/ada/demo.git')).toBeNull()
+    expect(parseGithubHttpsRemote('git@github.com:ada/demo.git')).toBeNull()
+  })
+})
+
+describe('adoptGitWorkspace', () => {
+  it('POSTs workspace/createGit with checkoutParent and never sends a token', async () => {
+    const rpc = async (method: string, args: unknown) => {
+      expect(method).toBe('workspace/createGit')
+      expect(args).toEqual({
+        request: {
+          remoteUrl: 'https://github.com/ada/demo.git',
+          checkoutParent: '/workspace',
+        },
+      })
+      expect(JSON.stringify(args)).not.toMatch(/gho_|token/i)
+      return {
+        created: true,
+        workspace: {
+          workspaceId: 'ws-git',
+          path: '/workspace/ada-demo',
+          title: 'ada/demo',
+        },
+      }
+    }
+    await expect(
+      adoptGitWorkspace({
+        remoteUrl: 'https://github.com/ada/demo.git',
+        checkoutParent: '/workspace',
+        rpc: rpc as typeof dshRpc,
+      }),
+    ).resolves.toEqual({
+      workspaceId: 'ws-git',
+      path: '/workspace/ada-demo',
+      title: 'ada/demo',
+    })
   })
 })
 

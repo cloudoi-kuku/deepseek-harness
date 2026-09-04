@@ -34,4 +34,4 @@ GitHub token 不出现在 launch 查询字符串中。launch HMAC 在 10 分钟�
 
 ## Related
 
-[Hosted generate POC](2026-08-28-hosted-generate-poc.zh.md) 仍拥有 generate 占用、成本上限，以及 generate/deploy 拆分。CoreNet 路径见 CoreNet 仓库中的 `docs/envon-harness-corenet-path.md`。
+[Hosted generate POC](2026-08-28-hosted-generate-poc.zh.md) 仍拥有 generate 占用、成本上限，以及 generate/deploy 拆分。[独立 Git IDE 与 CoreNet 并存](2026-09-03-envon-standalone-and-corenet-entry.zh.md) 拥有未认证落地页、GENERATE_TOKEN `dsh web` 和 `/clone`。CoreNet 路径见 CoreNet 仓库中的 `docs/envon-harness-corenet-path.md`。
