@@ -25,7 +25,7 @@ function dshOrigin() {
 
 /**
  * @param {unknown} body
- * @returns {{ kind: 'github', owner: string, name: string, token: string, cloneUrl: string, defaultBranch: string } | null}
+ * @returns {{ kind: 'github', owner: string, name: string, token: string, cloneUrl: string, defaultBranch: string, brief: string } | null}
  */
 export function parseWorkspaceGrant(body) {
   if (body === null || typeof body !== 'object') return null

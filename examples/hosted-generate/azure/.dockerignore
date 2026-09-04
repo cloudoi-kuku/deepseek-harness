@@ -8,5 +8,7 @@
 !generate-server.mjs
 !generate.patch.yml
 !launch-token.mjs
+!launch-token.d.mts
+!workspace-github.d.mts
 !generate.html
 !entrypoint.sh
