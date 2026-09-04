@@ -82,7 +82,7 @@ function fakeResponse(): {
   return { response, state }
 }
 
-async function mounted(config?: { trustedHosts?: string[] }): Promise<{
+async function mounted(config?: { trustedHosts?: string[]; requireBrowserSession?: boolean }): Promise<{
   routes: WebRoute[]
   upgrades: WebUpgradeRoute[]
   connection: HostConnectionHandle
@@ -222,6 +222,20 @@ describe('connection node half', () => {
       cookie: browserCookie(connection, 'harness.example:3080'),
     }), declared.response)
     expect(declared.state.status).toBe(404)
+    await dispose()
+  })
+
+  it('skips the browser-session cookie when requireBrowserSession is false', async () => {
+    const { routes, dispose } = await mounted({
+      trustedHosts: ['harness.example'],
+      requireBrowserSession: false,
+    })
+    const allowed = fakeResponse()
+    await routes[0]!.handler(fakeRequest({ host: '127.0.0.1:3080' }), allowed.response)
+    expect(allowed.state.status).toBe(404)
+    const denied = fakeResponse()
+    await routes[0]!.handler(fakeRequest({ host: 'other.example' }), denied.response)
+    expect(denied.state).toMatchObject({ status: 403, body: 'forbidden' })
     await dispose()
   })
 

@@ -99,7 +99,7 @@ async function pinGithubWorkspace(launchToken) {
 }
 
 /**
- * Idempotent dsh `workspace.create` for `/workspace`. Concurrent callers share one attempt.
+ * Idempotent dsh `workspace/create` for `/workspace`. Concurrent callers share one attempt.
  * @param {string} title
  */
 function pinDshWorkspace(title) {

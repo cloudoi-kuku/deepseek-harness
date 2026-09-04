@@ -106,9 +106,9 @@ describe('fetchWorkspaceGrant', () => {
 })
 
 describe('dshRpc', () => {
-  it('POSTs a published-dsh apiproxy envelope to /api/<dotted-method>', async () => {
+  it('POSTs a Typert envelope to /api/<namespace>/<method>', async () => {
     const fetchImpl: typeof fetch = async (input, init) => {
-      expect(fetchUrl(input)).toBe('http://127.0.0.1:3080/api/workspace.create')
+      expect(fetchUrl(input)).toBe('http://127.0.0.1:3080/api/workspace/create')
       expect(init?.method).toBe('POST')
       expect(init?.headers).toMatchObject({ 'content-type': 'application/json' })
       const body = JSON.parse(expectStringBody(init)) as {
@@ -118,7 +118,7 @@ describe('dshRpc', () => {
       }
       expect(body).toMatchObject({
         type: 'client-request',
-        method: 'workspace.create',
+        method: 'workspace/create',
         payload: { path: '/workspace' },
       })
       return new Response(
@@ -132,7 +132,7 @@ describe('dshRpc', () => {
     }
 
     const value = await dshRpc(
-      'workspace.create',
+      'workspace/create',
       { path: '/workspace' },
       { origin: 'http://127.0.0.1:3080', fetchImpl, rpcId: 't1' },
     )
@@ -145,14 +145,14 @@ describe('adoptDshWorkspace', () => {
     const calls: string[] = []
     const rpc = async (method: string, args: Record<string, unknown>) => {
       calls.push(method)
-      if (method === 'workspace.create') {
+      if (method === 'workspace/create') {
         expect(args).toEqual({ path: '/workspace' })
         return {
           created: true,
           workspace: { workspaceId: 'ws-1', path: '/workspace', title: 'workspace' },
         }
       }
-      expect(method).toBe('workspace.rename')
+      expect(method).toBe('workspace/rename')
       expect(args).toEqual({ workspaceId: 'ws-1', title: 'ada/cloudoi-harness' })
       return { workspace: { workspaceId: 'ws-1', path: '/workspace', title: 'ada/cloudoi-harness' } }
     }
@@ -162,7 +162,7 @@ describe('adoptDshWorkspace', () => {
       title: 'ada/cloudoi-harness',
       rpc: rpc as typeof dshRpc,
     })
-    expect(calls).toEqual(['workspace.create', 'workspace.rename'])
+    expect(calls).toEqual(['workspace/create', 'workspace/rename'])
     expect(workspace.workspaceId).toBe('ws-1')
   })
 
@@ -170,10 +170,10 @@ describe('adoptDshWorkspace', () => {
     let creates = 0
     const delays: number[] = []
     const rpc = async (method: string) => {
-      if (method !== 'workspace.create') throw new Error(`unexpected ${method}`)
+      if (method !== 'workspace/create') throw new Error(`unexpected ${method}`)
       creates += 1
       if (creates === 1) {
-        const error = new Error('dsh workspace.create HTTP 404')
+        const error = new Error('dsh workspace/create HTTP 404')
         ;(error as Error & { status: number }).status = 404
         throw error
       }
@@ -196,12 +196,12 @@ describe('adoptDshWorkspace', () => {
     expect(delays).toEqual([5])
 
     const invalid = async () => {
-      const error = new Error('invalid payload for workspace.create')
+      const error = new Error('invalid payload for workspace/create')
       ;(error as Error & { code: string }).code = 'bad-request'
       throw error
     }
     await expect(
       adoptDshWorkspace({ attempts: 5, rpc: invalid }),
-    ).rejects.toThrow(/invalid payload for workspace.create/)
+    ).rejects.toThrow(/invalid payload for workspace\/create/)
   })
 })

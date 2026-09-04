@@ -1,0 +1,10 @@
+# dsh --profile web only (not headless generate). Overlay pins workspace/create
+# over loopback before any browser cookie exists. dsh binds 127.0.0.1 inside
+# the container; the public proxy still requires the CoreNet launch token.
+# Restate trustedHosts: a patch replaces the whole connection config.
+
+- id: connection
+  inject: [webRuntime]
+  config:
+    trustedHosts: !!js ctx.webRuntime.trustedHosts
+    requireBrowserSession: false

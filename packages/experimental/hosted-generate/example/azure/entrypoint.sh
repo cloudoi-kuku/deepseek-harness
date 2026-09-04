@@ -27,7 +27,7 @@ for host in ${TRUSTED_HOST}; do
 done
 
 # shellcheck disable=SC2086
-dsh --profile web --patch /app/grok.patch.yml --no-open --port "${DSH_PORT}" ${TRUST_FLAGS} &
+dsh --profile web --patch /app/grok.patch.yml --patch /app/web-rpc.patch.yml --no-open --port "${DSH_PORT}" ${TRUST_FLAGS} &
 DSH_PID=$!
 
 node /app/generate-server.mjs &

@@ -112,9 +112,9 @@ export function ensureGithubWorkspace(launchToken) {
 }
 
 /**
- * Call one published-dsh apiproxy unary method over loopback HTTP.
- * `dsh@0.1.1-rc.2` serves dotted methods (`workspace.create`), not Typert `workspace/create`.
- * @param {string} method - dotted method, for example `workspace.create`.
+ * Call one Host unary Remote over loopback HTTP.
+ * Typert endpoints are `<namespace>/<method>` (`workspace/create`).
+ * @param {string} method - Typert endpoint, for example `workspace/create`.
  * @param {Record<string, unknown>} payload - the method's request object (the envelope `payload` slot).
  * @param {{ origin?: string, fetchImpl?: typeof fetch, rpcId?: string }} [opts]
  * @returns {Promise<unknown>}
@@ -172,19 +172,19 @@ export async function adoptDshWorkspace(opts = {}) {
   const rpc = opts.rpc ?? dshRpc
   const rpcOpts = { origin: opts.origin, fetchImpl: opts.fetchImpl }
 
-  let lastError = 'dsh web did not accept workspace.create'
+  let lastError = 'dsh web did not accept workspace/create'
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const value = await rpc('workspace.create', { path }, rpcOpts)
+      const value = await rpc('workspace/create', { path }, rpcOpts)
       const workspace = value !== null && typeof value === 'object'
         ? /** @type {{ workspace?: { workspaceId?: string, path?: string, title?: string } }} */ (value).workspace
         : undefined
       if (workspace === undefined || typeof workspace.workspaceId !== 'string') {
-        throw new Error('dsh workspace.create returned no workspace')
+        throw new Error('dsh workspace/create returned no workspace')
       }
       if (title !== '' && workspace.title !== title) {
         try {
-          await rpc('workspace.rename', { workspaceId: workspace.workspaceId, title }, rpcOpts)
+          await rpc('workspace/rename', { workspaceId: workspace.workspaceId, title }, rpcOpts)
         } catch {
           // Display title only; create already registered the GitHub cwd.
         }

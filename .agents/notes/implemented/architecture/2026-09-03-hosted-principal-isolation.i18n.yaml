@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-03-hosted-principal-isolation.md
-2026-09-03-hosted-principal-isolation.md: 6239b4acdd46a434c48ff5a111b456aa76a2b652
-2026-09-03-hosted-principal-isolation.zh.md: 5804589e6a56c60ec6dbd8320c82f3825927a902
+2026-09-03-hosted-principal-isolation.md: 356c98acc6e505461132425b32a1785e508514f9
+2026-09-03-hosted-principal-isolation.zh.md: 10e4e7744a6b9f4f179b52f9c3df96efb03aad55
