@@ -1,8 +1,10 @@
-import { rm } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startMockLlmServer } from '@deepseek-ai/dsh-llm-mock-server'
 import { loadHostedGenerate } from '../boot.ts'
 
+const expectedPath = fileURLToPath(new URL('./snapshots/static-site/artifact.expected.json', import.meta.url))
 const INDEX_HTML = '<h1>POC</h1>'
 
 let home: string | undefined
@@ -55,9 +57,10 @@ describe('hosted-generate keyless smoke', () => {
       await waitCompleted(port, sessionId)
       const artifact = await fetch(`http://127.0.0.1:${String(port)}/sessions/${sessionId}/artifact`)
       expect(artifact.status).toBe(200)
-      await expect(artifact.json()).resolves.toMatchObject({
-        files: { 'index.html': INDEX_HTML },
-      })
+      const payload = await artifact.json() as { files: Record<string, string> }
+      const expected = JSON.parse(await readFile(expectedPath, 'utf8')) as { files: Record<string, string> }
+      expect(payload.files).toEqual(expected.files)
+      expect(expected.files).toEqual({ 'index.html': INDEX_HTML })
     } finally {
       await mock.close()
     }
