@@ -116,7 +116,7 @@ export function ensureGithubWorkspace(launchToken) {
  * Typert endpoints are `<namespace>/<method>` (`workspace/create`); the
  * envelope payload is `{ args }` wrapping the Remote request object.
  * @param {string} method - Typert endpoint, for example `workspace/create`.
- * @param {Record<string, unknown>} args - the Remote request object.
+ * @param {Record<string, unknown>} args - Typert args keyed by parameter name (`request` for workspace remotes).
  * @param {{ origin?: string, fetchImpl?: typeof fetch, rpcId?: string }} [opts]
  * @returns {Promise<unknown>}
  */
@@ -176,7 +176,7 @@ export async function adoptDshWorkspace(opts = {}) {
   let lastError = 'dsh web did not accept workspace/create'
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const value = await rpc('workspace/create', { path }, rpcOpts)
+      const value = await rpc('workspace/create', { request: { path } }, rpcOpts)
       const workspace = value !== null && typeof value === 'object'
         ? /** @type {{ workspace?: { workspaceId?: string, path?: string, title?: string } }} */ (value).workspace
         : undefined
@@ -185,7 +185,9 @@ export async function adoptDshWorkspace(opts = {}) {
       }
       if (title !== '' && workspace.title !== title) {
         try {
-          await rpc('workspace/rename', { workspaceId: workspace.workspaceId, title }, rpcOpts)
+          await rpc('workspace/rename', {
+            request: { workspaceId: workspace.workspaceId, title },
+          }, rpcOpts)
         } catch {
           // Display title only; create already registered the GitHub cwd.
         }

@@ -114,12 +114,12 @@ describe('dshRpc', () => {
       const body = JSON.parse(expectStringBody(init)) as {
         type: string
         method: string
-        payload: { args: { path: string } }
+        payload: { args: { request: { path: string } } }
       }
       expect(body).toMatchObject({
         type: 'client-request',
         method: 'workspace/create',
-        payload: { args: { path: '/workspace' } },
+        payload: { args: { request: { path: '/workspace' } } },
       })
       return new Response(
         JSON.stringify({
@@ -133,7 +133,7 @@ describe('dshRpc', () => {
 
     const value = await dshRpc(
       'workspace/create',
-      { path: '/workspace' },
+      { request: { path: '/workspace' } },
       { origin: 'http://127.0.0.1:3080', fetchImpl, rpcId: 't1' },
     )
     expect(value).toEqual({ created: true, workspace: { workspaceId: 'ws-1' } })
@@ -146,14 +146,14 @@ describe('adoptDshWorkspace', () => {
     const rpc = async (method: string, args: Record<string, unknown>) => {
       calls.push(method)
       if (method === 'workspace/create') {
-        expect(args).toEqual({ path: '/workspace' })
+        expect(args).toEqual({ request: { path: '/workspace' } })
         return {
           created: true,
           workspace: { workspaceId: 'ws-1', path: '/workspace', title: 'workspace' },
         }
       }
       expect(method).toBe('workspace/rename')
-      expect(args).toEqual({ workspaceId: 'ws-1', title: 'ada/cloudoi-harness' })
+      expect(args).toEqual({ request: { workspaceId: 'ws-1', title: 'ada/cloudoi-harness' } })
       return { workspace: { workspaceId: 'ws-1', path: '/workspace', title: 'ada/cloudoi-harness' } }
     }
 
