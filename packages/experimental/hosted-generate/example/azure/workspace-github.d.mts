@@ -25,7 +25,7 @@ export declare function ensureGithubWorkspace(launchToken: string): Promise<unkn
 
 export declare function dshRpc(
   method: string,
-  payload: unknown,
+  args: unknown,
   opts?: { origin?: string; fetchImpl?: typeof fetch; rpcId?: string },
 ): Promise<unknown>
 

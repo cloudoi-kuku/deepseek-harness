@@ -5,7 +5,7 @@
 # GENERATE_TOKEN has no launch cookie and would otherwise empty listVisible.
 #
 # Build from repository root (linux/amd64 for Azure Container Apps):
-#   az acr build -r acrenvonaiprdeus2 -t hosted-generate-poc:web11 \
+#   az acr build -r acrenvonaiprdeus2 -t hosted-generate-poc:web12 \
 #     -f packages/experimental/hosted-generate/example/azure/Dockerfile.web \
 #     --build-arg DSH_CLIENT_COMMIT_HASH=$(git rev-parse HEAD) .
 

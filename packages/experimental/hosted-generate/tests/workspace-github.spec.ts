@@ -114,12 +114,12 @@ describe('dshRpc', () => {
       const body = JSON.parse(expectStringBody(init)) as {
         type: string
         method: string
-        payload: { path: string }
+        payload: { args: { path: string } }
       }
       expect(body).toMatchObject({
         type: 'client-request',
         method: 'workspace/create',
-        payload: { path: '/workspace' },
+        payload: { args: { path: '/workspace' } },
       })
       return new Response(
         JSON.stringify({

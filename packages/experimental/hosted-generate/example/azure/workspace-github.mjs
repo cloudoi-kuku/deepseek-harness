@@ -113,13 +113,14 @@ export function ensureGithubWorkspace(launchToken) {
 
 /**
  * Call one Host unary Remote over loopback HTTP.
- * Typert endpoints are `<namespace>/<method>` (`workspace/create`).
+ * Typert endpoints are `<namespace>/<method>` (`workspace/create`); the
+ * envelope payload is `{ args }` wrapping the Remote request object.
  * @param {string} method - Typert endpoint, for example `workspace/create`.
- * @param {Record<string, unknown>} payload - the method's request object (the envelope `payload` slot).
+ * @param {Record<string, unknown>} args - the Remote request object.
  * @param {{ origin?: string, fetchImpl?: typeof fetch, rpcId?: string }} [opts]
  * @returns {Promise<unknown>}
  */
-export async function dshRpc(method, payload, opts = {}) {
+export async function dshRpc(method, args, opts = {}) {
   const origin = (opts.origin ?? dshOrigin()).replace(/\/$/, '')
   const fetchImpl = opts.fetchImpl ?? fetch
   const rpcId = opts.rpcId ?? `envon-${Date.now().toString(36)}`
@@ -130,7 +131,7 @@ export async function dshRpc(method, payload, opts = {}) {
       type: 'client-request',
       rpcId,
       method,
-      payload,
+      payload: { args },
     }),
   })
   const raw = await response.text()
