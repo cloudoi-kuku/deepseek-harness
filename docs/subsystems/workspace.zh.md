@@ -2,7 +2,7 @@
 
 [English](workspace.md) | 中文
 
-工作区（workspace）是用户工作目录的持久记录：一个建立在规范路径之上的稳定 id、一个显示标题，以及归属于它的会话的有序账本。该子系统是单个包（package）（[dsh-workspace](../../packages/workspace/workspace)，`ctx.workspaceRegistry`）——一项宿主侧可选能力，不属于 agent loop（智能体循环）主干，并且对模型不可见（没有工具、没有提示词文本、没有会话事件）。它通过[存储领域数据形式](storage.zh.md)存储自己的记录，并对照 [`SessionHeader.cwd`](persistence.zh.md#sessionheader--metadata-beside-the-log) 校验会话成员资格，因此 `storageDomain` 与 `sessionPersistence` 是必需的启动依赖：持久化这一依赖不可用时，插件保持 pending，而不是把这种不可用误当作空历史。设计记录：[领域 KV 存储 Agent Note（agent 决策记录）](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.zh.md)；引导与 GUI 顺序：[Workspace UI 产品流程 Agent Note](../../.agents/notes/implemented/feature/2026-07-25-workspace-ui-product-flow.zh.md)。
+工作区（workspace）是用户工作目录的持久记录：一个建立在规范路径之上的稳定 id、一个显示标题，以及归属于它的会话的有序账本。该子系统以 [dsh-workspace](../../packages/workspace/workspace)（`ctx.workspaceRegistry`）为中心，并通过可选 workspace-source 提供者把本地路径或 Git 远程解析为会话使用的 cwd。它是一项宿主侧能力，不属于 agent loop（智能体循环）主干，并且对模型不可见（没有工具、没有提示词文本、没有会话事件）。它通过[存储领域数据形式](storage.zh.md)存储自己的记录，并对照 [`SessionHeader.cwd`](persistence.zh.md#sessionheader--metadata-beside-the-log) 校验会话成员资格，因此 `storageDomain` 与 `sessionPersistence` 是必需的启动依赖：持久化这一依赖不可用时，插件保持 pending，而不是把这种不可用误当作空历史。设计记录：[领域 KV 存储 Agent Note（agent 决策记录）](../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.zh.md)；引导与 GUI 顺序：[Workspace UI 产品流程 Agent Note](../../.agents/notes/implemented/feature/2026-07-25-workspace-ui-product-flow.zh.md)。
 
 源码：[`packages/workspace/workspace/src/types.ts`](../../packages/workspace/workspace/src/types.ts)
 
@@ -42,6 +42,12 @@ interface Workspace {
 
   /** Display title. Defaults to `basename(path)` at create; duplicates are allowed. */
   readonly title: string
+
+  /**
+   * How this workspace's directory was obtained. Local is an existing host
+   * path; git is a checkout. Never contains a token.
+   */
+  readonly source: WorkspaceSourceRecord
 
   /** ISO-8601 creation instant, stamped at create and never rewritten. */
   readonly createdAt: string
@@ -198,6 +204,13 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('create') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>
 
 /**
+ * Create or idempotently resolve one Git Workspace. Requires a git workspace source.
+ * @param request - remote URL and checkout parent.
+ * @returns the Workspace and whether this call created it.
+ */
+@Remote('createGit') createGit(request: WorkspaceCreateGitRequest): Promise<WorkspaceCreateValue>
+
+/**
  * Rename one Workspace to a unique non-blank title.
  * @param request - Workspace identity and proposed title.
  * @returns the updated Workspace projection.
@@ -263,6 +276,14 @@ Durable workspace registry. Startup waits for `sessionPersistence`, builds one c
 async create(path: string, title?: string): Promise<Workspace>
 
 /**
+ * Create or reuse a Git workspace. Requires `ctx.workspaceSource` with a git
+ * provider. The checkout is prepared before the record is written.
+ * @param request - remote URL and checkout parent; owner/repo/branch may be omitted when the URL is GitHub.
+ * @returns the existing or newly durable workspace.
+ */
+async createGit(request: { readonly remoteUrl: string readonly checkoutParent: string readonly owner?: string | undefined readonly repo?: string | undefined readonly branch?: string | undefined readonly credentialId?: string | undefined readonly title?: string | undefined }): Promise<Workspace>
+
+/**
  * Look up a workspace by id.
  * @param id - Workspace id.
  * @returns the workspace, or `undefined` when unknown.
@@ -318,4 +339,41 @@ async resolveByPath(path: string): Promise<Workspace | undefined>
 Types: [SessionId](core.zh.md)
 
 Source: [`packages/workspace/workspace/src/index.ts`](../../packages/workspace/workspace/src/index.ts)
+
+<a id="ctxworkspacesource--workspacesource"></a>
+
+### `ctx.workspaceSource` — `WorkspaceSource`
+
+Dispatcher over registered workspace-source providers.
+
+```ts cordis-catalog
+/**
+ * Register one kind. Duplicate kinds throw. Returns the disposer.
+ * @param provider - local or git implementation.
+ * @returns unregistration.
+ */
+register(provider: WorkspaceSourceProvider): () => void
+
+/**
+ * Canonicalize a request through the provider for `request.kind`.
+ * @param request - local path or git remote.
+ * @returns the spec to store on the workspace record.
+ */
+resolve(request: WorkspaceSourceRequest): WorkspaceSpec
+
+/**
+ * Materialize or refresh the working copy and return its canonical cwd.
+ * @param spec - stored source.
+ * @returns canonical cwd for session.create.
+ */
+prepare(spec: WorkspaceSpec): Promise<WorkspaceCheckout>
+
+/**
+ * Return the mounted git provider. Throws when no git provider is registered.
+ * @returns the git provider.
+ */
+git(): GitWorkspaceSourceProvider
+```
+
+Source: [`packages/workspace/workspace-source/src/index.ts`](../../packages/workspace/workspace-source/src/index.ts)
 <!-- END GENERATED cordis-surface -->

@@ -5,6 +5,7 @@ import {
 import type {
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
+  WorkspaceCreateGitRequest,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
@@ -68,6 +69,11 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
   readonly calls: Array<{ readonly method: string; readonly request: unknown }> = []
   onCreate: (request: WorkspaceCreateRequest) => Promise<RemoteResult<WorkspaceCreateValue>> = request =>
     Promise.resolve(remoteOk({ workspace: workspace(request.path.split('/').pop() ?? 'workspace'), created: true }))
+  onCreateGit: (request: WorkspaceCreateGitRequest) => Promise<RemoteResult<WorkspaceCreateValue>> = request =>
+    Promise.resolve(remoteOk({
+      workspace: workspace(request.repo ?? 'git-workspace'),
+      created: true,
+    }))
   onRename: (request: WorkspaceRenameRequest) => Promise<RemoteResult<WorkspaceValue>> = request =>
     Promise.resolve(remoteOk({ workspace: { ...workspace(String(request.workspaceId)), title: request.title } }))
   onDelete: (_request: WorkspaceDeleteRequest) => Promise<RemoteResult<WorkspaceDeleteValue>> = () =>
@@ -89,6 +95,11 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
   create(request: WorkspaceCreateRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
     this.record('create', request)
     return this.onCreate(request)
+  }
+
+  createGit(request: WorkspaceCreateGitRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
+    this.record('createGit', request)
+    return this.onCreateGit(request)
   }
 
   rename(request: WorkspaceRenameRequest): Promise<RemoteResult<WorkspaceValue>> {
@@ -183,6 +194,20 @@ describe('ClientWorkspaceModel', () => {
     await expect(model.create({ path: '/w/existing' })).resolves.toMatchObject({
       ok: false, error: { code: 'internal', message: 'create transport' },
     })
+  })
+
+  it('creates a Git workspace through createGit and prepends the returned row', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    await expect(model.createGit({
+      remoteUrl: 'https://github.com/acme/demo.git',
+      checkoutParent: '/tmp/checkouts',
+    })).resolves.toMatchObject({ ok: true })
+    expect(remote.calls).toContainEqual({
+      method: 'createGit',
+      request: { remoteUrl: 'https://github.com/acme/demo.git', checkoutParent: '/tmp/checkouts' },
+    })
+    expect(model.getSnapshot().items[0]?.workspaceId).toBe('git-workspace')
   })
 
   it('lets newer stream order outrank unary echoes and rolls failures back', async () => {

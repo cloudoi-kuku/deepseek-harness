@@ -256,6 +256,37 @@ Types: [Agent](core.zh.md)
 
 Source: [`packages/extensions/cordis-host-runner/src/index.ts`](../../packages/extensions/cordis-host-runner/src/index.ts)
 
+<a id="ctxhostedgenerate--hostedgenerateservice"></a>
+
+### `ctx.hostedGenerate` — `HostedGenerateService`
+
+Hosted generate service (`ctx.hostedGenerate`).
+
+```ts cordis-catalog
+/**
+ * Start one generation in a disposable workspace.
+ * @param request - user prompt and optional tenant correlation.
+ * @returns the generation id; poll {@link status} until it is terminal.
+ */
+async start(request: GenerateStartRequest): Promise<{ sessionId: GenerateSessionId }>
+
+/**
+ * Read one generation's public status.
+ * @param sessionId - id returned by {@link start}.
+ * @returns the current status record.
+ */
+status(sessionId: GenerateSessionId): GenerateStatus
+
+/**
+ * Read the collected file map of a completed generation.
+ * @param sessionId - id returned by {@link start}.
+ * @returns the artifact.
+ */
+artifact(sessionId: GenerateSessionId): GenerateArtifact
+```
+
+Source: [`packages/experimental/hosted-generate/src/index.ts`](../../packages/experimental/hosted-generate/src/index.ts)
+
 <a id="ctxinspector--inspectorservice"></a>
 
 ### `ctx.inspector` — `InspectorService`

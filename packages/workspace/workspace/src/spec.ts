@@ -18,8 +18,35 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
  * stamped at create; `sessionIds` is the ordered ownership account (array
  * order is display order); timestamps are ISO-8601 strings.
  */
+/** Discriminated origin of the workspace directory. Tokens are never stored. */
+export const workspaceSource = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('local'),
+    path: z.string(),
+  }),
+  z.object({
+    kind: z.literal('git'),
+    provider: z.literal('github'),
+    owner: z.string(),
+    repo: z.string(),
+    branch: z.string(),
+    remoteUrl: z.string(),
+    checkoutPath: z.string(),
+    credentialId: z.string().optional(),
+  }),
+])
+
+/** Stored source; inferred from {@link workspaceSource}. */
+export type WorkspaceSourceRecord = z.infer<typeof workspaceSource>
+
+/**
+ * Durable shape of one workspace record. `path` is the `fs.realpath` canon
+ * stamped at create (the session cwd); `source` is local or git; `sessionIds`
+ * is the ordered ownership account; timestamps are ISO-8601 strings.
+ */
 export const workspaceRecord = z.object({
   path: z.string(),
+  source: workspaceSource,
   title: z.string(),
   sessionIds: z.array(z.string().transform(SessionId)),
   createdAt: z.string(),
@@ -66,7 +93,7 @@ export type WorkspaceDomainState = z.infer<typeof workspaceDomainState>
  */
 export const workspaceDomainSpec = defineDomain({
   name: 'workspace',
-  version: 2,
+  version: 3,
   global: {
     schema: workspaceDomainState,
     initial: { initialized: false, workspaceIds: [], archivedSessionIds: [] },

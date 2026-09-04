@@ -184,6 +184,9 @@ export class FakeApiClient {
   onWorkspaceCreate: (payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView; created: boolean }>> =
     () => Promise.resolve(remoteOk({ workspace: fakeWorkspace('fk-ws'), created: true }))
 
+  onWorkspaceCreateGit: (payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView; created: boolean }>> =
+    () => Promise.resolve(remoteOk({ workspace: fakeWorkspace('fk-git-ws'), created: true }))
+
   onWorkspaceRename: (payload: unknown) => Promise<RemoteResult<{ workspace: WorkspaceView }>> =
     () => Promise.resolve(remoteOk({ workspace: fakeWorkspace('fk-ws') }))
 
@@ -260,6 +263,7 @@ export class FakeApiClient {
       },
       workspace: {
         create: payload => this.record('workspace.create', payload, this.onWorkspaceCreate(payload)),
+        createGit: payload => this.record('workspace.createGit', payload, this.onWorkspaceCreateGit(payload)),
         rename: payload => this.record('workspace.rename', payload, this.onWorkspaceRename(payload)),
         delete: payload => this.record('workspace.delete', payload, this.onWorkspaceDelete(payload)),
         insertBefore: payload => this.record(

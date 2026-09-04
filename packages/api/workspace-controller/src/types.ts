@@ -19,6 +19,17 @@ export interface WorkspaceView {
   readonly workspaceId: WorkspaceId
   /** Canonical host directory path. */
   readonly path: string
+  /** Local directory or Git checkout origin. Absent only on fixtures that predate source. */
+  readonly source?: {
+    readonly kind: 'local' | 'git'
+    readonly path?: string
+    readonly provider?: 'github'
+    readonly owner?: string
+    readonly repo?: string
+    readonly branch?: string
+    readonly remoteUrl?: string
+    readonly checkoutPath?: string
+  }
   /** User-visible title. */
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
@@ -73,6 +84,17 @@ export interface DirectoryPickerErrorDetailsMap {
 /** Existing directory requested for Workspace adoption. */
 export interface WorkspaceCreateRequest {
   readonly path: string
+}
+
+/** Git remote requested for Workspace adoption. Tokens are never in this payload. */
+export interface WorkspaceCreateGitRequest {
+  readonly remoteUrl: string
+  readonly checkoutParent: string
+  readonly owner?: string
+  readonly repo?: string
+  readonly branch?: string
+  readonly credentialId?: string | undefined
+  readonly title?: string | undefined
 }
 
 /** Created or previously registered Workspace. */

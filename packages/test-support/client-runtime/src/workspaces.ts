@@ -81,6 +81,32 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Register a Git remote as a Workspace (recorded).
+   * @param input - Host createGit payload.
+   * @returns the created Workspace view.
+   */
+  async createGit(input: {
+    remoteUrl: string
+    checkoutParent: string
+    owner?: string
+    repo?: string
+    branch?: string
+    credentialId?: string
+    title?: string
+  }): Promise<WorkspaceView> {
+    this.calls.push({ method: 'createGit', args: [input] })
+    const stub = this.stubs.get('createGit')
+    if (stub !== undefined) return await (stub(input) as Promise<WorkspaceView>)
+    const title = input.title ?? input.repo ?? input.remoteUrl
+    return {
+      workspaceId: `ws-git-${title}` as WorkspaceId,
+      title,
+      path: input.checkoutParent,
+      sessionIds: [],
+    } as unknown as WorkspaceView
+  }
+
+  /**
    * Rename a Workspace (recorded). The default echoes a minimal view.
    * @param workspaceId - target workspace.
    * @param title - new title.

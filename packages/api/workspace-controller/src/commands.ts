@@ -13,6 +13,7 @@ import { workspaceView } from './feed.ts'
 import type {
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
+  WorkspaceCreateGitRequest,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
@@ -51,6 +52,28 @@ export class WorkspaceCommands {
           'workspace-invalid-path',
           `cannot create a Workspace at "${request.path}": ${errorMessage(error)}`,
           { path: request.path },
+        )
+      }
+    })
+  }
+
+  /**
+   * Create or resolve one Git Workspace.
+   * @param request - remote URL and checkout parent.
+   * @returns the Workspace and whether this call created it.
+   */
+  createGit(request: WorkspaceCreateGitRequest): Promise<WorkspaceCreateValue> {
+    return this.enqueue(async () => {
+      try {
+        const known = new Set(this.ctx.workspaceRegistry.list().map(workspace => workspace.id))
+        const workspace = await this.ctx.workspaceRegistry.createGit(request)
+        return { workspace: workspaceView(workspace), created: !known.has(workspace.id) }
+      } catch (error) {
+        if (error instanceof TypertRemoteFailure) throw error
+        throw failure(
+          'workspace-invalid-path',
+          `cannot create a Git Workspace from "${request.remoteUrl}": ${errorMessage(error)}`,
+          { path: request.remoteUrl },
         )
       }
     })

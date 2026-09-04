@@ -54,6 +54,18 @@
         "tests/**/*.ts"
       ]
     },
+    "packages/experimental/hosted-generate": {
+      "entry": [
+        "tests/**/*.spec.ts",
+        "tests/**/*.e2e.ts",
+        "example/**/*.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts",
+        "example/**/*.ts"
+      ]
+    },
     "packages/extensions/cordis-host-runner": {
       "entry": [
         "tests/**/*.spec.ts"

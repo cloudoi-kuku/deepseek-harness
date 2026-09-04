@@ -20,6 +20,7 @@ import {
 import type {
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
+  WorkspaceCreateGitRequest,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
@@ -120,6 +121,10 @@ class ScriptedWorkspaceRemote implements WorkspaceRemote {
     throw new Error('unused')
   }
 
+  createGit(_request: WorkspaceCreateGitRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
+    throw new Error('unused')
+  }
+
   rename(_request: WorkspaceRenameRequest): Promise<RemoteResult<WorkspaceValue>> {
     throw new Error('unused')
   }
@@ -159,6 +164,11 @@ class ScriptedWorkspaceRemote implements WorkspaceRemote {
 class CommandWorkspaceRemote implements WorkspaceRemote {
   readonly create = vi.fn<WorkspaceRemote['create']>(request => Promise.resolve(remoteOk({
     workspace: workspace('created', { path: request.path }),
+    created: true,
+  })))
+
+  readonly createGit = vi.fn<WorkspaceRemote['createGit']>(request => Promise.resolve(remoteOk({
+    workspace: workspace('git-created', { path: request.checkoutParent }),
     created: true,
   })))
 

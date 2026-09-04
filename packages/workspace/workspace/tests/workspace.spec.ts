@@ -9,6 +9,7 @@ import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import type { DomainChanged } from '@deepseek-ai/dsh-storage-domain'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
+import type { WorkspaceSourceRequest, WorkspaceSpec } from '@deepseek-ai/dsh-workspace-source'
 import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
 import WorkspaceRegistry, {
   WorkspaceId,
@@ -17,7 +18,7 @@ import WorkspaceRegistry, {
 } from '../src/index.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from '../src/index.ts'
 
-const DOMAIN_VERSION = 2
+const DOMAIN_VERSION = 3
 
 const header = (id: string, cwd?: string, createdAt = 0): SessionHeader => ({
   version: 0,
@@ -32,6 +33,17 @@ interface HarnessOptions {
   liveSessions?: SessionHeader[]
   sessionStore?: boolean
   backend?: StorageBackend
+}
+
+interface Deferred<T> {
+  readonly promise: Promise<T>
+  resolve(value: T): void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((settle) => { resolve = settle })
+  return { promise, resolve }
 }
 
 /** Boot the real storage/domain/registry composition over controllable header-only peers. */
@@ -133,6 +145,7 @@ function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:0
   return {
     path,
     title: basename(path),
+    source: { kind: 'local', path },
     sessionIds: sessionIds.map(SessionId),
     createdAt,
     updatedAt: createdAt,
@@ -378,6 +391,61 @@ describe('WorkspaceRegistry create and lookup', () => {
     ])
     expect(left).toBe(right)
     expect(registry.list()).toEqual([left])
+    expect(pool.media.get('workspace')!.tables.get('workspaces')!.size).toBe(1)
+  })
+
+  it('serializes Git workspace preparation through registry operations', async () => {
+    const checkout = await makeDir('git-checkout')
+    const { ctx, registry, pool } = await harness()
+    const gate = deferred<undefined>()
+    const events: string[] = []
+    let prepares = 0
+    const spec: WorkspaceSpec = {
+      kind: 'git',
+      provider: 'github',
+      owner: 'acme',
+      repo: 'demo',
+      branch: 'main',
+      remoteUrl: 'https://github.com/acme/demo.git',
+      checkoutPath: checkout,
+    }
+    ctx.provide('workspaceSource', {
+      resolve: (_request: WorkspaceSourceRequest): WorkspaceSpec => {
+        events.push('resolve')
+        return spec
+      },
+      prepare: async (_spec: WorkspaceSpec) => {
+        prepares += 1
+        events.push(`prepare-start:${prepares}`)
+        if (prepares === 1) await gate.promise
+        events.push(`prepare-end:${prepares}`)
+        return { cwd: checkout }
+      },
+    } as never)
+
+    const first = registry.createGit({
+      remoteUrl: spec.remoteUrl,
+      checkoutParent: join(base, 'checkouts'),
+    })
+    const second = registry.createGit({
+      remoteUrl: spec.remoteUrl,
+      checkoutParent: join(base, 'checkouts'),
+    })
+
+    await vi.waitFor(() => {
+      expect(events).toEqual(['resolve', 'prepare-start:1'])
+    })
+    gate.resolve(undefined)
+    const [left, right] = await Promise.all([first, second])
+    expect(left).toBe(right)
+    expect(events).toEqual([
+      'resolve',
+      'prepare-start:1',
+      'prepare-end:1',
+      'resolve',
+      'prepare-start:2',
+      'prepare-end:2',
+    ])
     expect(pool.media.get('workspace')!.tables.get('workspaces')!.size).toBe(1)
   })
 

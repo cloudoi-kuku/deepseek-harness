@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The workspace group provides the durable project list behind a host UI: one product package, `workspace`, that names user directories as projects, keeps them in a stable order, and groups each project's sessions under it. With it, a UI can show a sidebar of projects with their sessions, hide a session from the grouping without deleting it, and remove a project — removal never deletes the folder or the session histories, which become ungrouped. The group is host-side only: no tools, prompts, or session events, so the model and the agent loop never see it. Use it when the product shows a persistent workspace or project surface; it needs a session store and a persistence backend alongside it.
+The workspace group provides the durable project list behind a host UI: `workspace` names user directories as projects, keeps them in a stable order, and groups each project's sessions under it. `workspace-source` plus local and git providers resolve a local path or Git remote into a session cwd without storing tokens. With it, a UI can show a sidebar of projects with their sessions, hide a session from the grouping without deleting it, and remove a project — removal never deletes the folder or the session histories, which become ungrouped. The group is host-side only: no tools, prompts, or session events, so the model and the agent loop never see it. Use it when the product shows a persistent workspace or project surface; it needs a session store and a persistence backend alongside it.
 
 ## Table of Contents
 
@@ -25,6 +25,9 @@ The workspace group provides the durable project list behind a host UI: one prod
 | Package | Role | ctx key |
 |---|---|---|
 | [`workspace`](workspace/README.md) | Provides named, ordered projects with the sessions that ran in each directory | `ctx.workspaceRegistry` |
+| [`workspace-source`](workspace-source/README.md) | Resolves local or Git origins and prepares a session cwd | `ctx.workspaceSource` |
+| [`workspace-source-local`](workspace-source-local/README.md) | Existing-directory provider (`kind: 'local'`) | registers into `ctx.workspaceSource` |
+| [`workspace-source-git`](workspace-source-git/README.md) | Git clone/fetch/status/commit/push/pull provider (`kind: 'git'`) | registers into `ctx.workspaceSource` |
 
 -----
 

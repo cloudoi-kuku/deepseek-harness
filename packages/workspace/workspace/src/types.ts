@@ -8,6 +8,27 @@
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
+/** Local directory origin. */
+export interface LocalWorkspaceSource {
+  readonly kind: 'local'
+  readonly path: string
+}
+
+/** Git checkout origin. `credentialId` is a credentials-store id, never a token. */
+export interface GitWorkspaceSource {
+  readonly kind: 'git'
+  readonly provider: 'github'
+  readonly owner: string
+  readonly repo: string
+  readonly branch: string
+  readonly remoteUrl: string
+  readonly checkoutPath: string
+  readonly credentialId?: string | undefined
+}
+
+/** Discriminated workspace origin stored on the durable record. */
+export type WorkspaceSourceRecord = LocalWorkspaceSource | GitWorkspaceSource
+
 /**
  * Identifies one workspace record. A generated uuid, never the path: path
  * normalization rewrites paths, and a reference anchor must stay stable.
@@ -33,6 +54,12 @@ export interface Workspace {
 
   /** Display title. Defaults to `basename(path)` at create; duplicates are allowed. */
   readonly title: string
+
+  /**
+   * How this workspace's directory was obtained. Local is an existing host
+   * path; git is a checkout. Never contains a token.
+   */
+  readonly source: WorkspaceSourceRecord
 
   /** ISO-8601 creation instant, stamped at create and never rewritten. */
   readonly createdAt: string

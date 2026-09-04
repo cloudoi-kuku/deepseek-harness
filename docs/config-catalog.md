@@ -628,6 +628,48 @@ export interface Config {
 
 Source: [`packages/experimental/agent-team/src/types.ts:131`](../packages/experimental/agent-team/src/types.ts)
 
+<a id="deepseek-aidsh-experimental-hosted-generate"></a>
+
+## `@deepseek-ai/dsh-experimental-hosted-generate`
+
+Requires: `agents` · `sessions`
+
+```ts config-catalog
+/** Deployment config for the hosted-generate service. */
+export interface Config {
+  /** Provider route used for every created Agent. */
+  provider: string
+  /** Model id used for every created Agent. */
+  model: string
+  /** Maximum generations running at once. */
+  maxConcurrentSessions?: number
+  /** Wall-clock bound for one Agent run. */
+  sessionTimeoutMs?: number
+  /** Durable step bound; crossing it cancels the Agent. */
+  maxSteps?: number
+  /** Total UTF-8 artifact budget. */
+  maxArtifactBytes?: number
+  /** Maximum files retained in one artifact. */
+  maxFiles?: number
+  /** Maximum UTF-8 bytes of one retained file. */
+  maxFileBytes?: number
+  /** Maximum UTF-8 bytes of the start-request prompt. */
+  maxPromptBytes?: number
+  /** Completed records retained for later GET after workspace wipe. */
+  maxRetainedSessions?: number
+  /** Parent directory for disposable per-session workspaces. */
+  workspaceParent?: string
+  /** Model-visible generation instructions prepended to the user prompt. */
+  taskGuidance?: string
+  /** Optional shared bearer token; empty disables HTTP authentication. */
+  authToken?: string
+  /** When true, print the loopback generate URL after the web server listens. */
+  printListen?: boolean
+}
+```
+
+Source: [`packages/experimental/hosted-generate/src/types.ts:65`](../packages/experimental/hosted-generate/src/types.ts)
+
 <a id="deepseek-aidsh-experimental-inspector"></a>
 
 ## `@deepseek-ai/dsh-experimental-inspector`
@@ -3478,6 +3520,9 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-user-questions` ([`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts))
 - `@deepseek-ai/dsh-webhook` — requires `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` ([`packages/webhook/webhook/src/index.ts`](../packages/webhook/webhook/src/index.ts))
 - `@deepseek-ai/dsh-workspace` — requires `storageDomain` · `sessionPersistence` ([`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts))
+- `@deepseek-ai/dsh-workspace-source` ([`packages/workspace/workspace-source/src/index.ts`](../packages/workspace/workspace-source/src/index.ts))
+- `@deepseek-ai/dsh-workspace-source-git` — requires `workspaceSource` ([`packages/workspace/workspace-source-git/src/index.ts`](../packages/workspace/workspace-source-git/src/index.ts))
+- `@deepseek-ai/dsh-workspace-source-local` — requires `workspaceSource` ([`packages/workspace/workspace-source-local/src/index.ts`](../packages/workspace/workspace-source-local/src/index.ts))
 
 ## Seam packages (not directly loadable)
 

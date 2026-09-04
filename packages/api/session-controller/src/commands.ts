@@ -16,6 +16,7 @@ import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-ses
 import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { TypertRemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
+import type {} from '@deepseek-ai/dsh-workspace-source'
 import {
   ApiSessionAgentController,
   ApiSessionCwdConflict,
@@ -83,7 +84,7 @@ export class SessionCommandController {
         })
       }
     }
-    const cwd = workspace?.path ?? request.cwd ?? this.defaultCwd
+    const cwd = await this.resolveCreateCwd(workspace, request.cwd)
     let adopted: Agent
     try {
       adopted = await this.agents.ensureSession(
@@ -108,6 +109,31 @@ export class SessionCommandController {
     }
     const agentPreset = this.agents.presetForSession(adopted.session)
     return { sessionId, ...(agentPreset === undefined ? {} : { agentPreset }) }
+  }
+
+  /**
+   * Prepare a workspace source then return the session cwd.
+   * @param workspace - attached workspace, when named.
+   * @param requestedCwd - explicit cwd from a non-workspace caller.
+   * @returns canonical project directory.
+   */
+  private async resolveCreateCwd(
+    workspace: Workspace | undefined,
+    requestedCwd: string | undefined,
+  ): Promise<string> {
+    if (workspace === undefined) return requestedCwd ?? this.defaultCwd
+    const source = this.ctx.get('workspaceSource')
+    if (source !== undefined) {
+      return (await source.prepare(workspace.source)).cwd
+    }
+    if (workspace.source.kind !== 'local') {
+      reject(
+        'bad-request',
+        `session.create cannot prepare git workspace "${workspace.id}" without ctx.workspaceSource`,
+        {},
+      )
+    }
+    return workspace.path
   }
 
   /**

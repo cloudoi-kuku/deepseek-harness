@@ -83,6 +83,7 @@ describe('Session creation failures', () => {
     const workspace = {
       id: 'workspace-1' as WorkspaceId,
       path: '/workspace',
+      source: { kind: 'local', path: '/workspace' },
       attachSession: () => Promise.reject(new Error('read-only workspace')),
     } as unknown as Workspace
     failed.provide('workspaceRegistry', {

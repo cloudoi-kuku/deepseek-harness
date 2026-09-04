@@ -19,7 +19,7 @@ interface RootManifest {
 }
 
 interface DemoPolicy {
-  readonly kind: 'dsh-direct' | 'dsh-wrapper'
+  readonly kind: 'dsh-direct' | 'dsh-wrapper' | 'in-process'
   readonly wrapper?: string
 }
 
@@ -46,10 +46,11 @@ const EXECUTABLE_SOURCE_ALLOWLIST = new Map<string, string>([
   ['packages/test-support/llm-mock-server/src/bin.ts', 'test-only model server'],
 ])
 
-/** Root demos are application wrappers and therefore must visibly select dsh. */
+/** Root demos either select dsh visibly or name an explicitly classified in-process example. */
 const ROOT_DEMO_POLICIES = new Map<string, DemoPolicy>([
   ['demo:ptc', { kind: 'dsh-wrapper', wrapper: 'scripts/demo-ptc.mjs' }],
   ['demo:inspector', { kind: 'dsh-direct' }],
+  ['demo:hosted-generate', { kind: 'in-process', wrapper: 'packages/experimental/hosted-generate/example/serve.ts' }],
 ])
 
 const SOURCE_PATTERNS = [
@@ -144,6 +145,13 @@ function rootDemoViolations(root: string): string[] {
     if (policy.kind === 'dsh-direct') {
       if (!referencesDshCli(command)) failures.push(`package.json scripts.${name}: application demo must launch apps/cli/src/bin.ts`)
       if (referencesPackageEntry(command)) failures.push(`package.json scripts.${name}: application demo must not launch a package entry directly`)
+      continue
+    }
+    if (policy.kind === 'in-process') {
+      const target = policy.wrapper
+      if (target === undefined || !command.includes(target)) {
+        failures.push(`package.json scripts.${name}: classified in-process demo must launch ${String(target)}`)
+      }
       continue
     }
     const wrapper = policy.wrapper

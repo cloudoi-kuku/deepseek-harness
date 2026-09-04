@@ -834,6 +834,9 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:^
         version: link:../../workspace/workspace
+      '@deepseek-ai/dsh-workspace-source':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-source
 
   packages/api/settings-controller:
     dependencies:
@@ -905,6 +908,12 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:^
         version: link:../../workspace/workspace
+      '@deepseek-ai/dsh-workspace-source':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-source
+      '@deepseek-ai/dsh-workspace-source-git':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-source-git
 
   packages/attachment/attachment:
     devDependencies:
@@ -1617,6 +1626,15 @@ importers:
       '@deepseek-ai/dsh-workspace':
         specifier: workspace:^
         version: link:../../workspace/workspace
+      '@deepseek-ai/dsh-workspace-source':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-source
+      '@deepseek-ai/dsh-workspace-source-git':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-source-git
+      '@deepseek-ai/dsh-workspace-source-local':
+        specifier: workspace:^
+        version: link:../../workspace/workspace-source-local
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -9966,6 +9984,48 @@ importers:
       '@deepseek-ai/dsh-storage-domain':
         specifier: workspace:^
         version: link:../../storage/storage-domain
+      '@deepseek-ai/dsh-workspace-source':
+        specifier: workspace:^
+        version: link:../workspace-source
+
+  packages/workspace/workspace-source:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/workspace/workspace-source-git:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:^
+        version: link:../workspace
+      '@deepseek-ai/dsh-workspace-source':
+        specifier: workspace:^
+        version: link:../workspace-source
+
+  packages/workspace/workspace-source-local:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-workspace':
+        specifier: workspace:^
+        version: link:../workspace
+      '@deepseek-ai/dsh-workspace-source':
+        specifier: workspace:^
+        version: link:../workspace-source
 
   python/sdk-runtime:
     dependencies:

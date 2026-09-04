@@ -8,6 +8,7 @@ import { WorkspaceFeed } from './feed.ts'
 import type {
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
+  WorkspaceCreateGitRequest,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
@@ -57,6 +58,16 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('create')
   create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue> {
     return this.commands.create(request)
+  }
+
+  /**
+   * Create or idempotently resolve one Git Workspace. Requires a git workspace source.
+   * @param request - remote URL and checkout parent.
+   * @returns the Workspace and whether this call created it.
+   */
+  @Remote('createGit')
+  createGit(request: WorkspaceCreateGitRequest): Promise<WorkspaceCreateValue> {
+    return this.commands.createGit(request)
   }
 
   /**

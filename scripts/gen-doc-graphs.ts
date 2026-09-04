@@ -307,6 +307,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns WorkspaceId-branded records over the domain facility; stable sessionIds accounts drive Host RPC and GUI projections.',
   },
   {
+    key: 'workspaceSource',
+    pkg: 'workspace-source',
+    title: 'Workspace source provider registry',
+    mode: 'seam',
+    implementations: ['workspace-source-local', 'workspace-source-git'],
+    consumers: ['workspace', 'api-session-controller'],
+    note: 'Providers resolve durable source specs and prepare local cwd checkouts; workspace creation stores the spec, and session creation materializes the cwd before starting the Agent.',
+  },
+  {
     key: 'sessionQuery',
     pkg: 'session-query',
     title: 'Session reads, traces, filters, and search',
@@ -562,6 +571,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'core',
     consumers: ['experimental-tool-agent-team', 'experimental-client-ui-agent-team'],
     note: 'Owns the implicit-root roster, durable peer mailbox, shared task DAG, continuable-child lifecycle, and generated Team Remote methods; tool-agent-team contributes model controls and client-ui-agent-team mounts the browser contribution.',
+  },
+  {
+    key: 'hostedGenerate',
+    pkg: 'hosted-generate',
+    title: 'Hosted generation API',
+    mode: 'bundle',
+    note: 'Composes Agent, Session, optional web-server routes, and a disposable workspace to return generated UTF-8 file maps; deployment and product credentials stay outside the service.',
   },
   {
     key: 'inspector',

@@ -998,6 +998,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'hostedGenerate',
+    summary: 'Hosted generate service (`ctx.hostedGenerate`).',
+    description: 'Hosted generate service (`ctx.hostedGenerate`).',
+    methods: [
+      {
+        signature: 'async start(request: GenerateStartRequest): Promise<{ sessionId: GenerateSessionId }>',
+        description: 'Start one generation in a disposable workspace.',
+        parameters: [{ name: 'request', description: 'user prompt and optional tenant correlation.' }],
+        returns: 'the generation id; poll {@link status} until it is terminal.',
+      },
+      {
+        signature: 'status(sessionId: GenerateSessionId): GenerateStatus',
+        description: 'Read one generation\'s public status.',
+        parameters: [{ name: 'sessionId', description: 'id returned by {@link start}.' }],
+        returns: 'the current status record.',
+      },
+      {
+        signature: 'artifact(sessionId: GenerateSessionId): GenerateArtifact',
+        description: 'Read the collected file map of a completed generation.',
+        parameters: [{ name: 'sessionId', description: 'id returned by {@link start}.' }],
+        returns: 'the artifact.',
+      },
+    ],
+  },
+  {
     key: 'inspector',
     summary: 'Shared Host/Client service façade over the realm\'s source publisher.',
     description: 'Shared Host/Client service façade over the realm\'s source publisher.',
@@ -2768,6 +2793,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the Workspace and whether this call created it.',
       },
       {
+        signature: '@Remote(\'createGit\') createGit(request: WorkspaceCreateGitRequest): Promise<WorkspaceCreateValue>',
+        description: 'Create or idempotently resolve one Git Workspace. Requires a git workspace source.',
+        parameters: [{ name: 'request', description: 'remote URL and checkout parent.' }],
+        returns: 'the Workspace and whether this call created it.',
+      },
+      {
         signature: '@Remote(\'rename\') rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue>',
         description: 'Rename one Workspace to a unique non-blank title.',
         parameters: [{ name: 'request', description: 'Workspace identity and proposed title.' }],
@@ -2817,6 +2848,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the existing or newly durable workspace.',
       },
       {
+        signature: 'async createGit(request: { readonly remoteUrl: string readonly checkoutParent: string readonly owner?: string | undefined readonly repo?: string | undefined readonly branch?: string | undefined readonly credentialId?: string | undefined readonly title?: string | undefined }): Promise<Workspace>',
+        description: 'Create or reuse a Git workspace. Requires `ctx.workspaceSource` with a git provider. The checkout is prepared before the record is written.',
+        parameters: [{ name: 'request', description: 'remote URL and checkout parent; owner/repo/branch may be omitted when the URL is GitHub.' }],
+        returns: 'the existing or newly durable workspace.',
+      },
+      {
         signature: 'get(id: WorkspaceId): Workspace | undefined',
         description: 'Look up a workspace by id.',
         parameters: [{ name: 'id', description: 'Workspace id.' }],
@@ -2851,6 +2888,37 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Resolve by canonical directory path without creating or mutating a workspace. A missing path rejects during `realpath`; an existing unowned directory returns `undefined`.',
         parameters: [{ name: 'path', description: 'Existing directory path in any spelling.' }],
         returns: 'the workspace owning the canonical path, when one exists.',
+      },
+    ],
+  },
+  {
+    key: 'workspaceSource',
+    summary: 'Dispatcher over registered workspace-source providers.',
+    description: 'Dispatcher over registered workspace-source providers.',
+    methods: [
+      {
+        signature: 'register(provider: WorkspaceSourceProvider): () => void',
+        description: 'Register one kind. Duplicate kinds throw. Returns the disposer.',
+        parameters: [{ name: 'provider', description: 'local or git implementation.' }],
+        returns: 'unregistration.',
+      },
+      {
+        signature: 'resolve(request: WorkspaceSourceRequest): WorkspaceSpec',
+        description: 'Canonicalize a request through the provider for `request.kind`.',
+        parameters: [{ name: 'request', description: 'local path or git remote.' }],
+        returns: 'the spec to store on the workspace record.',
+      },
+      {
+        signature: 'prepare(spec: WorkspaceSpec): Promise<WorkspaceCheckout>',
+        description: 'Materialize or refresh the working copy and return its canonical cwd.',
+        parameters: [{ name: 'spec', description: 'stored source.' }],
+        returns: 'canonical cwd for session.create.',
+      },
+      {
+        signature: 'git(): GitWorkspaceSourceProvider',
+        description: 'Return the mounted git provider. Throws when no git provider is registered.',
+        parameters: [],
+        returns: 'the git provider.',
       },
     ],
   },
@@ -4031,8 +4099,28 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FsWriteOutcome {\n    operation: \'create\' | \'update\';\n    version: FsVersion;\n    before: string | null;\n    after: string;\n}',
   },
   {
+    name: 'GenerateArtifact',
+    declaration: 'export interface GenerateArtifact {\n    sessionId: GenerateSessionId;\n    files: Record<string, string>;\n}',
+  },
+  {
     name: 'GenerateOptions',
     declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+  },
+  {
+    name: 'GenerateSessionId',
+    declaration: 'export type GenerateSessionId = Branded<\'GenerateSessionId\'>;',
+  },
+  {
+    name: 'GenerateStartRequest',
+    declaration: 'export interface GenerateStartRequest {\n    prompt: string;\n    tenantId?: string;\n}',
+  },
+  {
+    name: 'GenerateStatus',
+    declaration: 'export interface GenerateStatus {\n    sessionId: GenerateSessionId;\n    tenantId?: string;\n    status: GenerateStatusKind;\n    error?: {\n        code: HostedGenerateErrorCode;\n        message: string;\n    };\n    fileCount?: number;\n    byteCount?: number;\n    stepCount?: number;\n}',
+  },
+  {
+    name: 'GenerateStatusKind',
+    declaration: 'export type GenerateStatusKind = \'running\' | \'completed\' | \'failed\' | \'cancelled\';',
   },
   {
     name: 'GenericCallView',
@@ -4041,6 +4129,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GenericResultView',
     declaration: 'export interface GenericResultView {\n    card: \'generic\';\n    title?: string;\n    content?: ContentBlock[];\n}',
+  },
+  {
+    name: 'GitWorkspaceRequest',
+    declaration: 'export interface GitWorkspaceRequest {\n    readonly kind: \'git\';\n    readonly provider: \'github\';\n    readonly remoteUrl: string;\n    readonly owner?: string;\n    readonly repo?: string;\n    readonly branch?: string;\n    readonly checkoutParent: string;\n    readonly credentialId?: string | undefined;\n}',
+  },
+  {
+    name: 'GitWorkspaceSourceProvider',
+    declaration: 'export interface GitWorkspaceSourceProvider extends WorkspaceSourceProvider {\n    readonly kind: \'git\';\n    status(cwd: string): Promise<GitWorkspaceStatus>;\n    commit(cwd: string, message: string): Promise<void>;\n    push(cwd: string): Promise<void>;\n    pull(cwd: string): Promise<void>;\n    checkoutBranch(cwd: string, branch: string): Promise<void>;\n}',
+  },
+  {
+    name: 'GitWorkspaceSpec',
+    declaration: 'export interface GitWorkspaceSpec {\n    readonly kind: \'git\';\n    readonly provider: \'github\';\n    readonly owner: string;\n    readonly repo: string;\n    readonly branch: string;\n    readonly remoteUrl: string;\n    readonly checkoutPath: string;\n    readonly credentialId?: string | undefined;\n}',
+  },
+  {
+    name: 'GitWorkspaceStatus',
+    declaration: 'export interface GitWorkspaceStatus {\n    readonly branch: string;\n    readonly dirty: boolean;\n    readonly ahead: number;\n    readonly behind: number;\n}',
   },
   {
     name: 'GoalActivation',
@@ -4081,6 +4185,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GrantRecord',
     declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
+  },
+  {
+    name: 'HostedGenerateErrorCode',
+    declaration: 'export type HostedGenerateErrorCode = \'GENERATE_BUSY\' | \'GENERATE_INVALID_REQUEST\' | \'GENERATE_NOT_FOUND\' | \'GENERATE_UNAUTHORIZED\' | \'GENERATE_TIMEOUT\' | \'GENERATE_FAILED\' | \'GENERATE_TOO_LARGE\';',
   },
   {
     name: 'ImageAttachmentLimits',
@@ -4297,6 +4405,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'LlmRuntime',
     declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+  },
+  {
+    name: 'LocalWorkspaceRequest',
+    declaration: 'export interface LocalWorkspaceRequest {\n    readonly kind: \'local\';\n    readonly path: string;\n}',
+  },
+  {
+    name: 'LocalWorkspaceSpec',
+    declaration: 'export interface LocalWorkspaceSpec {\n    readonly kind: \'local\';\n    readonly path: string;\n}',
   },
   {
     name: 'LspHover',
@@ -6048,7 +6164,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Workspace',
-    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly source: WorkspaceSourceRecord;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
   },
   {
     name: 'WorkspaceArchiveSessionRequest',
@@ -6061,6 +6177,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceBaseline',
     declaration: 'export interface WorkspaceBaseline {\n    readonly items: readonly WorkspaceView[];\n    readonly archivedSessionIds: readonly SessionId[];\n}',
+  },
+  {
+    name: 'WorkspaceCheckout',
+    declaration: 'export interface WorkspaceCheckout {\n    readonly cwd: string;\n}',
+  },
+  {
+    name: 'WorkspaceCreateGitRequest',
+    declaration: 'export interface WorkspaceCreateGitRequest {\n    readonly remoteUrl: string;\n    readonly checkoutParent: string;\n    readonly owner?: string;\n    readonly repo?: string;\n    readonly branch?: string;\n    readonly credentialId?: string | undefined;\n    readonly title?: string | undefined;\n}',
   },
   {
     name: 'WorkspaceCreateRequest',
@@ -6103,12 +6227,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WorkspaceRenameRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly title: string;\n}',
   },
   {
+    name: 'WorkspaceSourceProvider',
+    declaration: 'export interface WorkspaceSourceProvider {\n    readonly kind: WorkspaceSpec[\'kind\'];\n    resolve(request: WorkspaceSourceRequest): WorkspaceSpec;\n    prepare(spec: WorkspaceSpec): Promise<WorkspaceCheckout>;\n}',
+  },
+  {
+    name: 'WorkspaceSourceRequest',
+    declaration: 'export type WorkspaceSourceRequest = LocalWorkspaceRequest | GitWorkspaceRequest;',
+  },
+  {
+    name: 'WorkspaceSpec',
+    declaration: 'export type WorkspaceSpec = LocalWorkspaceSpec | GitWorkspaceSpec;',
+  },
+  {
     name: 'WorkspaceValue',
     declaration: 'export interface WorkspaceValue {\n    readonly workspace: WorkspaceView;\n}',
   },
   {
     name: 'WorkspaceView',
-    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly source?: {\n        readonly kind: \'local\' | \'git\';\n        readonly path?: string;\n        readonly provider?: \'github\';\n        readonly owner?: string;\n        readonly repo?: string;\n        readonly branch?: string;\n        readonly remoteUrl?: string;\n        readonly checkoutPath?: string;\n    };\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
 ]
 

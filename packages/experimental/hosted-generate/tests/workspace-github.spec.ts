@@ -8,6 +8,20 @@ import {
   redact,
 } from '../example/azure/workspace-github.mjs'
 
+type FetchInput = Parameters<typeof fetch>[0]
+type FetchInit = Parameters<typeof fetch>[1]
+
+function fetchUrl(input: FetchInput): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.href
+  return input.url
+}
+
+function expectStringBody(init: FetchInit): string {
+  if (typeof init?.body !== 'string') throw new Error('expected string request body')
+  return init.body
+}
+
 describe('parseWorkspaceGrant', () => {
   it('accepts a github clone grant and rejects a missing token', () => {
     expect(
@@ -60,7 +74,7 @@ describe('redact', () => {
 describe('fetchWorkspaceGrant', () => {
   it('sends the launch token as Bearer and parses the JSON grant', async () => {
     const fetchImpl: typeof fetch = async (input, init) => {
-      expect(String(input)).toBe('https://api.cloudoi.io/api/ai-build/from-harness/workspace')
+      expect(fetchUrl(input)).toBe('https://api.cloudoi.io/api/ai-build/from-harness/workspace')
       expect(init?.headers).toMatchObject({ authorization: 'Bearer launch-token' })
       return new Response(
         JSON.stringify({
@@ -94,10 +108,10 @@ describe('fetchWorkspaceGrant', () => {
 describe('dshRpc', () => {
   it('POSTs a published-dsh apiproxy envelope to /api/<dotted-method>', async () => {
     const fetchImpl: typeof fetch = async (input, init) => {
-      expect(String(input)).toBe('http://127.0.0.1:3080/api/workspace.create')
+      expect(fetchUrl(input)).toBe('http://127.0.0.1:3080/api/workspace.create')
       expect(init?.method).toBe('POST')
       expect(init?.headers).toMatchObject({ 'content-type': 'application/json' })
-      const body = JSON.parse(String(init?.body)) as {
+      const body = JSON.parse(expectStringBody(init)) as {
         type: string
         method: string
         payload: { path: string }
@@ -175,7 +189,7 @@ describe('adoptDshWorkspace', () => {
         attempts: 3,
         delayMs: 5,
         sleep: async (ms) => { delays.push(ms) },
-        rpc: rpc as typeof dshRpc,
+        rpc,
       }),
     ).resolves.toMatchObject({ workspaceId: 'ws-2' })
     expect(creates).toBe(2)
@@ -187,7 +201,7 @@ describe('adoptDshWorkspace', () => {
       throw error
     }
     await expect(
-      adoptDshWorkspace({ attempts: 5, rpc: invalid as typeof dshRpc }),
+      adoptDshWorkspace({ attempts: 5, rpc: invalid }),
     ).rejects.toThrow(/invalid payload for workspace.create/)
   })
 })

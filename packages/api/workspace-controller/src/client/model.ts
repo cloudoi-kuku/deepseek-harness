@@ -7,6 +7,7 @@ import type {
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
   WorkspaceBaseline,
+  WorkspaceCreateGitRequest,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteValue,
@@ -85,6 +86,22 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     let result: RemoteResult<WorkspaceCreateValue>
     try {
       result = await this.remote.create(input)
+    } catch (error) {
+      result = failureResult(error)
+    }
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
+   * Create or resolve a Git Workspace and merge the unary result immediately.
+   * @param input - remote URL and checkout parent.
+   * @returns generated Remote result.
+   */
+  async createGit(input: WorkspaceCreateGitRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
+    let result: RemoteResult<WorkspaceCreateValue>
+    try {
+      result = await this.remote.createGit(input)
     } catch (error) {
       result = failureResult(error)
     }

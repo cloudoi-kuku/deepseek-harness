@@ -95,6 +95,17 @@ describe('application entrypoints', () => {
     ])
   })
 
+  it('accepts a classified in-process root demo', () => {
+    const root = fixture()
+    write(root, 'package.json', JSON.stringify({
+      scripts: {
+        'demo:hosted-generate': 'node --import tsx packages/experimental/hosted-generate/example/serve.ts',
+      },
+    }))
+
+    expect(applicationEntrypointViolations(root)).toEqual([])
+  })
+
   it('rejects a new root demo until its launch role is classified', () => {
     const root = fixture()
     write(root, 'package.json', JSON.stringify({ scripts: { 'demo:new-app': 'dsh --profile new-app' } }))

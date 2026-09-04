@@ -11,6 +11,7 @@ import { basename } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-workspace-source'
 import type { DomainGlobal, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { WorkspaceEntity } from './entity.ts'
 import type { WorkspaceEntityHost } from './entity.ts'
@@ -19,10 +20,10 @@ export { WorkspaceMoveInvalidError } from './entity.ts'
 import { realpathNormalize } from './paths.ts'
 import { workspaceDomainSpec } from './spec.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
-import type { Workspace, WorkspaceId as WorkspaceIdBrand } from './types.ts'
+import type { Workspace, WorkspaceId as WorkspaceIdBrand, WorkspaceSourceRecord } from './types.ts'
 
-export type { Workspace } from './types.ts'
-export { workspaceDomainState, workspaceRecord, workspaceDomainSpec } from './spec.ts'
+export type { Workspace, WorkspaceSourceRecord, LocalWorkspaceSource, GitWorkspaceSource } from './types.ts'
+export { workspaceDomainState, workspaceRecord, workspaceDomainSpec, workspaceSource } from './spec.ts'
 export type { WorkspaceDomainState, WorkspaceRecord } from './spec.ts'
 export { realpathNormalize } from './paths.ts'
 
@@ -160,7 +161,48 @@ export class WorkspaceRegistry extends Service {
     if (!(await stat(canonical)).isDirectory()) {
       throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
     }
-    return await this.enqueueOperation(() => this.createCanonical(canonical, title))
+    return await this.enqueueOperation(() => this.createCanonical(canonical, title, {
+      kind: 'local',
+      path: canonical,
+    }))
+  }
+
+  /**
+   * Create or reuse a Git workspace. Requires `ctx.workspaceSource` with a git
+   * provider. The checkout is prepared before the record is written.
+   * @param request - remote URL and checkout parent; owner/repo/branch may be omitted when the URL is GitHub.
+   * @returns the existing or newly durable workspace.
+   */
+  async createGit(request: {
+    readonly remoteUrl: string
+    readonly checkoutParent: string
+    readonly owner?: string | undefined
+    readonly repo?: string | undefined
+    readonly branch?: string | undefined
+    readonly credentialId?: string | undefined
+    readonly title?: string | undefined
+  }): Promise<Workspace> {
+    const source = this.ctx.get('workspaceSource')
+    if (source === undefined) {
+      throw new Error('workspace.createGit requires ctx.workspaceSource with a git provider')
+    }
+    return await this.enqueueOperation(async () => {
+      const spec = source.resolve({
+        kind: 'git',
+        provider: 'github',
+        remoteUrl: request.remoteUrl,
+        checkoutParent: request.checkoutParent,
+        ...request.owner === undefined ? {} : { owner: request.owner },
+        ...request.repo === undefined ? {} : { repo: request.repo },
+        ...request.branch === undefined ? {} : { branch: request.branch },
+        ...request.credentialId === undefined ? {} : { credentialId: request.credentialId },
+      })
+      const { cwd } = await source.prepare(spec)
+      if (spec.kind !== 'git') {
+        throw new Error('workspace.createGit resolved a non-git spec')
+      }
+      return await this.createCanonical(cwd, request.title, spec)
+    })
   }
 
   /**
@@ -282,7 +324,11 @@ export class WorkspaceRegistry extends Service {
     return undefined
   }
 
-  private async createCanonical(canonical: string, title?: string): Promise<WorkspaceEntity> {
+  private async createCanonical(
+    canonical: string,
+    title: string | undefined,
+    source: WorkspaceSourceRecord,
+  ): Promise<WorkspaceEntity> {
     for (const entity of this.entities.values()) {
       if (entity.path === canonical) return entity
     }
@@ -294,6 +340,7 @@ export class WorkspaceRegistry extends Service {
     const now = new Date().toISOString()
     const record: WorkspaceRecord = {
       path: canonical,
+      source,
       title: workspaceName,
       sessionIds: [],
       createdAt: now,
@@ -459,6 +506,7 @@ export class WorkspaceRegistry extends Service {
         const createdAt = new Date(group.newestAt).toISOString()
         const record: WorkspaceRecord = {
           path: group.path,
+          source: { kind: 'local', path: group.path },
           title: basename(group.path),
           sessionIds,
           createdAt,

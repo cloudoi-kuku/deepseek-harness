@@ -111,6 +111,9 @@
     "@deepseek-ai/dsh-api-workspace-controller": "workspace:^",
     "@deepseek-ai/dsh-subprocess": "workspace:^",
     "@deepseek-ai/dsh-workspace": "workspace:^",
+    "@deepseek-ai/dsh-workspace-source": "workspace:^",
+    "@deepseek-ai/dsh-workspace-source-git": "workspace:^",
+    "@deepseek-ai/dsh-workspace-source-local": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
     "commander": "^15.0.0",
     "open": "^11.0.0"

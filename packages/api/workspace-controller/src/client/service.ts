@@ -40,6 +40,20 @@ export interface IWorkspaces {
    */
   create(input: { path: string }): Promise<WorkspaceView>
   /**
+   * Register a Git remote as a Workspace. Tokens are never in this payload.
+   * @param input - Host createGit payload.
+   * @returns the created or idempotently resolved Workspace.
+   */
+  createGit(input: {
+    remoteUrl: string
+    checkoutParent: string
+    owner?: string
+    repo?: string
+    branch?: string
+    credentialId?: string
+    title?: string
+  }): Promise<WorkspaceView>
+  /**
    * Rename a Workspace.
    * @param workspaceId - target Workspace.
    * @param title - new display title.
@@ -91,6 +105,20 @@ export class WorkspaceController extends Service implements IWorkspaces {
 
   async create(input: { path: string }): Promise<WorkspaceView> {
     const result = await this.model.create(input)
+    if (!result.ok) throw new WorkspaceCreateError(result.error)
+    return result.value.workspace
+  }
+
+  async createGit(input: {
+    remoteUrl: string
+    checkoutParent: string
+    owner?: string
+    repo?: string
+    branch?: string
+    credentialId?: string
+    title?: string
+  }): Promise<WorkspaceView> {
+    const result = await this.model.createGit(input)
     if (!result.ok) throw new WorkspaceCreateError(result.error)
     return result.value.workspace
   }

@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,8 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import { TypertRemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
+import WorkspaceSource from '@deepseek-ai/dsh-workspace-source'
+import GitWorkspaceSource from '@deepseek-ai/dsh-workspace-source-git'
 import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import WorkspaceController from '../src/index.ts'
@@ -86,6 +89,42 @@ describe('WorkspaceController commands', () => {
       created: false,
       workspace: { workspaceId, title: 'renamed' },
     })
+  })
+
+  it('createGit reports created false on the same checkout and never stores a token', async () => {
+    const { controller, ctx, root } = await harness()
+    await ctx.plugin(WorkspaceSource)
+    await ctx.plugin(GitWorkspaceSource)
+    const origin = join(root, 'acme', 'demo')
+    mkdirSync(origin, { recursive: true })
+    execFileSync('git', ['init', '-b', 'main'], { cwd: origin })
+    execFileSync('git', ['config', 'user.email', 'ws@test'], { cwd: origin })
+    execFileSync('git', ['config', 'user.name', 'ws-test'], { cwd: origin })
+    writeFileSync(join(origin, 'README.md'), 'hello\n')
+    execFileSync('git', ['add', '.'], { cwd: origin })
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: origin })
+    const first = await controller.createGit({
+      remoteUrl: origin,
+      checkoutParent: join(root, 'checkouts'),
+      owner: 'acme',
+      repo: 'demo',
+    })
+    expect(first.created).toBe(true)
+    expect(first.workspace.source).toMatchObject({
+      kind: 'git',
+      provider: 'github',
+      owner: 'acme',
+      repo: 'demo',
+    })
+    expect(JSON.stringify(first.workspace)).not.toMatch(/token|ghp_|github_pat/i)
+    const second = await controller.createGit({
+      remoteUrl: origin,
+      checkoutParent: join(root, 'checkouts'),
+      owner: 'acme',
+      repo: 'demo',
+    })
+    expect(second.created).toBe(false)
+    expect(second.workspace.workspaceId).toBe(first.workspace.workspaceId)
   })
 
   it('maps invalid paths, blank names, conflicts, and unknown ids to stable failures', async () => {
