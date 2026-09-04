@@ -104,6 +104,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
 
   /** Authenticate an index request through the process-token exchange or cookie. */
   authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean {
+    if (!this.requireBrowserSession) return true
     return this.browserAuth.authorizeIndex(request, response)
   }
 

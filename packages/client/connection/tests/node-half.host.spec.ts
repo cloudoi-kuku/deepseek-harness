@@ -226,13 +226,16 @@ describe('connection node half', () => {
   })
 
   it('skips the browser-session cookie when requireBrowserSession is false', async () => {
-    const { routes, dispose } = await mounted({
+    const { routes, connection, dispose } = await mounted({
       trustedHosts: ['harness.example'],
       requireBrowserSession: false,
     })
     const allowed = fakeResponse()
     await routes[0]!.handler(fakeRequest({ host: '127.0.0.1:3080' }), allowed.response)
     expect(allowed.state.status).toBe(404)
+    const index = fakeResponse()
+    expect(connection.authorizeIndex(fakeRequest({ host: '127.0.0.1:3080' }), index.response)).toBe(true)
+    expect(index.state.status).toBeUndefined()
     const denied = fakeResponse()
     await routes[0]!.handler(fakeRequest({ host: 'other.example' }), denied.response)
     expect(denied.state).toMatchObject({ status: 403, body: 'forbidden' })

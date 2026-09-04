@@ -82,9 +82,10 @@ export interface ConnectionConfig {
   /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
   maxRequestBodyBytes?: number
   /**
-   * When false, `/api` skips the browser-session cookie after the Host/Origin
-   * fence. Default true. Envon overlay RPC pins `workspace/create` on
-   * loopback before any browser has a cookie; dsh still binds 127.0.0.1 only.
+   * When false, `/api` and the index skip the browser-session cookie after the
+   * Host/Origin fence. Default true. Envon authenticates at the public proxy
+   * (CoreNet launch token); dsh binds 127.0.0.1 only, so users never see the
+   * printed `?token=` URL.
    */
   requireBrowserSession?: boolean
 }
